@@ -1,4 +1,4 @@
-package FiberHTTP
+package fiberhttp
 
 import (
 	"encoding/json"

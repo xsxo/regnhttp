@@ -1,4 +1,4 @@
-package fiberhttptest
+package fiberhttp
 
 import (
 	"bufio"
