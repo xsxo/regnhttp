@@ -1,11 +1,10 @@
-package fiberhttp
+package regn
 
 import (
 	"bufio"
 	"bytes"
 	"crypto/tls"
 	"encoding/base64"
-	"log"
 	"net"
 	"net/url"
 	"strconv"
@@ -15,82 +14,93 @@ import (
 type __inforamtion__ struct {
 	use_proxy      bool
 	host_connected string
-	connection     net.Conn
-	thereader      *bufio.Reader
-	thewriter      *bufio.Writer
+	connection     *net.Conn
 	run            bool
 
+	peeker  *bufio.Reader
+	flusher *bufio.Writer
+
+	authorization string
 	host_proxy    string
 	port_proxy    string
-	authorization []byte
-}
-
-type FiberhttpError struct {
-	Message string
 }
 
 type Client struct {
 	confgiuration *__inforamtion__
 	Timeout       int
+	Deadline      int
 }
 
-func (e *FiberhttpError) Error() string {
-	return "FiberHTTP Error :" + e.Message
+func (e *RegnError) Error() string {
+	return "RegnHTTP Error: " + e.Message
 }
 
-func ___connect_net___(host string, port string, thetimeout int) (net.Conn, error) {
+func ___connect_net___(host string, port string, thetimeout int) (*net.Conn, error) {
+	if thetimeout == 0 {
+		thetimeout = 10
+	}
+
 	if port != "443" {
-		TheConn, err := net.DialTimeout("tcp4", host+":"+port, time.Duration(thetimeout)*time.Second)
-		// TheConn, err := net.Dial("tcp", host+":"+port)
+		TheConn, err := net.DialTimeout("tcp", host+":"+port, time.Duration(thetimeout)*time.Second)
+
 		if err != nil {
-			er := &FiberhttpError{}
-			er.Message = "Field connection with '" + host + "' host"
+			er := &RegnError{}
+			er.Message = "Field connection with '" + host + "' host\nnethttp Error: " + err.Error()
 			return nil, er
 		}
 
-		return TheConn, nil
+		TheConn = net.Conn(TheConn)
+		return &TheConn, nil
 
 	} else {
-		TheConn, err := tls.Dial("tcp4", host+":"+port, &tls.Config{ServerName: host})
+		TlsConn, err := tls.Dial("tcp4", host+":"+port, &tls.Config{ServerName: host})
 
 		if err != nil {
-			er := &FiberhttpError{}
+			er := &RegnError{}
 			er.Message = "Field connection with '" + host + "' host"
 			return nil, er
 		}
 
-		return TheConn, nil
+		TheConn := net.Conn(TlsConn)
+		return &TheConn, nil
 	}
 }
 
-func ___connect_to_host___(__my *__inforamtion__, host_port string, authorization string) error {
-	er := &FiberhttpError{}
-	therequest := []byte("CONNECT " + host_port + " HTTP/1.1\r\n" + authorization + "Host: " + host_port + "\r\n\r\n")
+func ___connect_to_host___(cn *Client, host_port string, authorization string) error {
+	// therequest := []byte("CONNECT " + host_port + " HTTP/1.1\r\n" + authorization + "Host: " + host_port + "\r\n\r\n")
 
-	buffer := make([]byte, 4096)
+	cn.create_line()
 
-	__my.connection.Write(therequest)
-	if _, err := __my.connection.Write(therequest); err != nil {
-		er.Message = "Field connection with '" + host_port + "' addr"
-		__my.connection.Close()
-		__my.connection = nil
-		return er
+	therequest := Request()
+	therequest.SetMethod("CONNECT")
+	therequest.theybytesapi = []byte(host_port)
+	therequest.Header.Set("Host", host_port)
+	therequest.Header.Set("Authorization", authorization)
+	therequest.release()
+
+	cn.confgiuration.flusher.Write(therequest.Header.raw)
+	if err := cn.confgiuration.flusher.Flush(); err != nil {
+		(*cn.confgiuration.connection).Close()
+		cn.close_line()
+		return &RegnError{Message: "Field connection with '" + host_port + "' addr"}
 	}
 
-	data, err := __my.connection.Read(buffer)
+	cn.confgiuration.peeker.Peek(1)
+
+	res, err := cn.confgiuration.peeker.Peek(cn.confgiuration.peeker.Buffered())
 
 	if err != nil {
-		er.Message = "Field connection with '" + host_port + "' addr"
-		__my.connection.Close()
-		__my.connection = nil
-		return er
+		(*cn.confgiuration.connection).Close()
+		cn.close_line()
+		(*cn.confgiuration.connection) = nil
+		return &RegnError{Message: "Field connection with '" + host_port + "' addr"}
 	}
 
-	if len(code_regexp.FindSubmatch(buffer[:data])) == 0 {
-		er.Message = "Field connection with '" + host_port + "' addr"
-		__my.connection.Close()
-		__my.connection = nil
-		return er
+	if len(code_regexp.FindSubmatch(res)) == 0 {
+		(*cn.confgiuration.connection).Close()
+		cn.close_line()
+		(*cn.confgiuration.connection) = nil
+		return &RegnError{Message: "Field connection with '" + host_port + "' addr"}
 	}
 
 	return nil
@@ -101,7 +111,8 @@ func (cn *Client) Porxy(Url string) {
 		cn.confgiuration = &__inforamtion__{}
 	}
 	if cn.confgiuration.connection != nil {
-		cn.confgiuration.connection.Close()
+		(*cn.confgiuration.connection).Close()
+		cn.close_line()
 		cn.confgiuration.connection = nil
 	}
 
@@ -114,13 +125,9 @@ func (cn *Client) Porxy(Url string) {
 	}
 
 	if Parse.Host == "" {
-		log.SetFlags(0)
-		log.Fatalln("Fiberhttp error: No host proxy url supplied.")
-		return
+		panic("RegnHTTP error: No host proxy url supplied.")
 	} else if Parse.Port() == "" {
-		log.SetFlags(0)
-		log.Fatalln("Fiberhttp error: No host proxy url supplied.")
-		return
+		panic("RegnHTTP error: No host proxy url supplied.")
 	}
 
 	cn.confgiuration.host_proxy = Parse.Hostname()
@@ -130,11 +137,8 @@ func (cn *Client) Porxy(Url string) {
 
 		password, _ := Parse.User.Password()
 		credentials := Parse.User.Username() + ":" + password
-		cn.confgiuration.authorization = nil
-
-		cn.confgiuration.authorization = append(cn.confgiuration.authorization, proxybasic[:]...)
-		cn.confgiuration.authorization = append(cn.confgiuration.authorization, []byte(base64.StdEncoding.EncodeToString([]byte(credentials)))...)
-		cn.confgiuration.authorization = append(cn.confgiuration.authorization, []byte{13, 10}...)
+		cn.confgiuration.authorization = ""
+		cn.confgiuration.authorization = base64.StdEncoding.EncodeToString([]byte(credentials))
 	}
 }
 
@@ -144,19 +148,34 @@ func (cn *Client) Close() {
 	}
 
 	if cn.confgiuration.connection != nil {
-		cn.confgiuration.connection.Close()
+		(*cn.confgiuration.connection).Close()
+		cn.close_line()
 		cn.confgiuration.connection = nil
+	}
+
+	cn.confgiuration.host_connected = ""
+}
+
+func (cn *Client) close_line() {
+	if cn.confgiuration.peeker != nil {
+		nrpool.Put(cn.confgiuration.peeker)
+	}
+
+	if cn.confgiuration.flusher != nil {
+		nwpool.Put(cn.confgiuration.flusher)
 	}
 }
 
-func (cn *Client) Connect(REQ request) error {
+func (cn *Client) create_line() {
+	cn.close_line()
+	cn.confgiuration.peeker = get_reader(cn.confgiuration.connection)
+	cn.confgiuration.flusher = get_writer(cn.confgiuration.connection)
+}
+
+func (cn *Client) Connect(REQ *request) error {
 
 	if cn.confgiuration == nil {
 		cn.confgiuration = &__inforamtion__{}
-	}
-
-	if cn.Timeout == 0 {
-		cn.Timeout = 10
 	}
 
 	if cn.confgiuration.use_proxy {
@@ -167,14 +186,14 @@ func (cn *Client) Connect(REQ request) error {
 				return err
 			}
 
-			if err := ___connect_to_host___(cn.confgiuration, REQ.Header.myhost+":"+REQ.Header.myport, string(cn.confgiuration.authorization)); err != nil {
+			if err := ___connect_to_host___(cn, REQ.Header.myhost+":"+REQ.Header.myport, cn.confgiuration.authorization); err != nil {
 				return err
 			}
 
 			cn.confgiuration.host_connected = REQ.Header.myhost
 
 		} else if cn.confgiuration.host_connected != REQ.Header.myhost {
-			if err := ___connect_to_host___(cn.confgiuration, REQ.Header.myhost+":"+REQ.Header.myport, string(cn.confgiuration.authorization)); err != nil {
+			if err := ___connect_to_host___(cn, REQ.Header.myhost+":"+REQ.Header.myport, cn.confgiuration.authorization); err != nil {
 				return err
 			}
 
@@ -186,11 +205,10 @@ func (cn *Client) Connect(REQ request) error {
 			config := &tls.Config{
 				ServerName: REQ.Header.myhost,
 			}
-			cn.confgiuration.connection = tls.Client(cn.confgiuration.connection, config)
+			tlsConn := tls.Client(*cn.confgiuration.connection, config)
+			tcc := net.Conn(tlsConn)
+			cn.confgiuration.connection = &tcc
 		}
-
-		cn.confgiuration.thereader = bufio.NewReader(cn.confgiuration.connection)
-		cn.confgiuration.thewriter = bufio.NewWriter(cn.confgiuration.connection)
 
 	} else {
 		if cn.confgiuration.connection == nil {
@@ -201,11 +219,13 @@ func (cn *Client) Connect(REQ request) error {
 				return err
 			}
 			cn.confgiuration.host_connected = REQ.Header.myhost
+			cn.create_line()
 
 		} else if cn.confgiuration.host_connected != REQ.Header.myhost {
 			var err error
 			if cn.confgiuration.connection != nil {
-				cn.confgiuration.connection.Close()
+				cn.close_line()
+				(*cn.confgiuration.connection).Close()
 				cn.confgiuration.connection = nil
 			}
 
@@ -215,97 +235,109 @@ func (cn *Client) Connect(REQ request) error {
 			}
 
 			cn.confgiuration.host_connected = REQ.Header.myhost
+			cn.create_line()
 		}
-		cn.confgiuration.thereader = bufio.NewReader(cn.confgiuration.connection)
-		cn.confgiuration.thewriter = bufio.NewWriter(cn.confgiuration.connection)
 	}
 
 	return nil
 }
 
-func (cn *Client) Send(REQ request) (readresponse, error) {
+func (cn *Client) Send(REQ *request, RES *response) error {
 	if cn.confgiuration == nil {
 		cn.confgiuration = &__inforamtion__{}
 	}
 
 	if cn.confgiuration.run {
-		log.SetFlags(0)
-		log.Fatalln("fiberhttp error: the client isn't support pool connections\ncreate a client for each connection")
+		cn.confgiuration.run = false
+		panic("RegnHTTP Error: The client struct isn't support pool connections\ncreate a client for each connection || use sync.Pool for pool connections")
 	}
 
 	cn.confgiuration.run = true
 
 	if NewErr := cn.Connect(REQ); NewErr != nil {
 		cn.confgiuration.run = false
-		return readresponse{}, NewErr
+		return NewErr
 	}
 
 	if REQ.Header.raw == nil {
 		if NewErr := REQ.release(); NewErr != nil {
 			cn.confgiuration.run = false
-			return readresponse{}, NewErr
+			return NewErr
 		}
 	}
 
-	cn.confgiuration.thewriter.Write(REQ.Header.raw)
+	if cn.Deadline != 0 {
+		(*cn.confgiuration.connection).SetDeadline(time.Now().Add(time.Duration(cn.Deadline) * time.Second))
+		cn.Deadline = 0
+	}
 
-	if NewErr := cn.confgiuration.thewriter.Flush(); NewErr != nil {
-		cn.confgiuration.connection.Close()
+	cn.confgiuration.flusher.Write(REQ.Header.raw)
+
+	if (*RES.Header.thebuffer).B != nil {
+		(*RES.Header.thebuffer).Reset()
+	}
+
+	if NewErr := cn.confgiuration.flusher.Flush(); NewErr != nil {
+		(*cn.confgiuration.connection).Close()
+		cn.close_line()
 		cn.confgiuration.connection = nil
 		cn.confgiuration.host_connected = ""
 		cn.confgiuration.run = false
-		return readresponse{}, &FiberhttpError{Message: " Error writing '" + NewErr.Error() + "'"}
+		return &RegnError{Message: " Error writing: " + NewErr.Error()}
 	}
 
-	thend := bytes_pool.Get()
-	thend.Reset()
-
-	to_return := readresponse{Header: &headers_struct{}}
-	var buffed int = 1
 	for {
-		test, err := cn.confgiuration.thereader.Peek(buffed)
+		cn.confgiuration.peeker.Peek(1)
+		test, err := cn.confgiuration.peeker.Peek(cn.confgiuration.peeker.Buffered())
+		le := len(test)
+		cn.confgiuration.peeker.Discard(le)
+		(*RES.Header.thebuffer).Write(test)
 
 		if err != nil {
-			cn.confgiuration.connection.Close()
+			(*cn.confgiuration.connection).Close()
+			cn.close_line()
 			cn.confgiuration.connection = nil
 			cn.confgiuration.host_connected = ""
+
 			cn.confgiuration.run = false
-			return readresponse{content: nil, Header: &headers_struct{theybytesheaders: nil}}, &FiberhttpError{Message: "Error reading"}
+
+			return &RegnError{Message: "Error reading: " + err.Error()}
+
+		} else if le == 0 {
+			(*cn.confgiuration.connection).Close()
+			cn.close_line()
+			cn.confgiuration.connection = nil
+			cn.confgiuration.host_connected = ""
+
+			cn.confgiuration.run = false
+
+			return nil
 		}
 
-		cn.confgiuration.thereader.Discard(buffed)
-		buffed = cn.confgiuration.thereader.Buffered()
-		thend.Write(test)
+		if bytes.Contains((*RES.Header.thebuffer).B, tow_lines) {
+			parts := bytes.SplitN((*RES.Header.thebuffer).B, tow_lines, 2)
+			body := parts[1]
 
-		if bytes.Contains(thend.B, tow_lines[:]) {
-			parts := bytes.SplitN(thend.B, tow_lines[:], 2)
-			to_return.Header.theybytesheaders = append(to_return.Header.theybytesheaders, parts[0]...)
-			to_return.content = append(to_return.content, parts[1]...)
-			// headers.B = parts[0]
-			// body.B = parts[1]
-
-			contentLengthMatch := contetre.FindSubmatch(to_return.Header.theybytesheaders)
+			contentLengthMatch := contetre.FindSubmatch((*RES.Header.thebuffer).B)
 			if len(contentLengthMatch) > 1 {
 				contentLength, _ := strconv.Atoi(string(contentLengthMatch[1]))
-				if len(to_return.content) >= contentLength {
+				if len(body) >= contentLength {
 					break
 				}
-			} else if bytes.Contains(thend.B, zero_lines[:]) {
+			} else if bytes.Contains((*RES.Header.thebuffer).B, zero_lines) {
 				break
 			}
 		}
 	}
 
-	bytes_pool.Put(thend)
 	cn.confgiuration.run = false
-
-	return to_return, nil
+	return nil
 }
 
-func (cn *Client) Do(REQ request) (readresponse, error) {
-	return cn.Send(REQ)
+func (cn *Client) Do(REQ *request, RES *response) error {
+	return cn.Send(REQ, RES)
 }
 
-func (cn *Client) Action(REQ request) (readresponse, error) {
-	return cn.Send(REQ)
+func (cn *Client) Action(REQ *request, RES *response) error {
+	return cn.Send(REQ, RES)
 }

@@ -1,52 +1,62 @@
-package fiberhttp
+package regn
 
 import (
+	"bytes"
 	"encoding/json"
 	"strconv"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/valyala/bytebufferpool"
 )
 
 type headers_struct struct {
-	theybytesheaders []byte
+	thebuffer *bytebufferpool.ByteBuffer
 }
 
-type readresponse struct {
-	content []byte
-	Header  *headers_struct
+type response struct {
+	Header *headers_struct
 }
 
-func (RES *readresponse) StatusCode() int {
-	matches := status_code_regexp.FindSubmatch(RES.Header.theybytesheaders)
+func Response() *response {
+	return &response{Header: &headers_struct{bytes_pool.Get()}}
+}
+
+func (RES *response) Close() {
+	RES.Header.thebuffer.Reset()
+	bytes_pool.Put(RES.Header.thebuffer)
+}
+
+func (RES *response) StatusCode() int {
+	matches := status_code_regexp.FindSubmatch(RES.Header.thebuffer.B)
 	status_code, _ := strconv.Atoi(string(matches[1]))
 	return status_code
 }
 
-func (RES *readresponse) Reason() string {
-	matches := reason_regexp.FindSubmatch(RES.Header.theybytesheaders)
+func (RES *response) Reason() string {
+	matches := reason_regexp.FindSubmatch(RES.Header.thebuffer.B)
 	return string(matches[1])
 }
 
-func (RES *readresponse) StringBody() (string, error) {
-	err := &FiberhttpError{}
+func (RES *response) StringBody() (string, error) {
 
-	if !utf8.Valid(RES.content) {
-		err.Message = "Field decode body to UTF-8 string"
-		return "", err
+	body := bytes.SplitN(RES.Header.thebuffer.B, tow_lines, 2)[1]
+	if !utf8.Valid(body) {
+		return "", &RegnError{Message: "Field decode body to UTF-8 string"}
 	}
 
-	return string(RES.content), nil
+	return string(body), nil
 }
 
-func (RES *readresponse) Body() []byte {
-	return RES.content
+func (RES *response) Body() []byte {
+	return bytes.SplitN(RES.Header.thebuffer.B, tow_lines, 2)[1]
 }
 
-func (RES *readresponse) Json() (map[string]interface{}, error) {
-	NewErr := &FiberhttpError{}
+func (RES *response) Json() (map[string]interface{}, error) {
+	NewErr := &RegnError{}
 
 	var result map[string]interface{}
-	err := json.Unmarshal([]byte(string(RES.content)), &result)
+	err := json.Unmarshal([]byte(string(bytes.SplitN(RES.Header.thebuffer.B, tow_lines, 2)[1])), &result)
 
 	if err != nil {
 		NewErr.Message = "Field decode body to json format"
@@ -58,7 +68,7 @@ func (RES *readresponse) Json() (map[string]interface{}, error) {
 
 func (HEAD *headers_struct) GetAll() map[string]string {
 	forReturn := make(map[string]string)
-	forNothing := strings.Split(string(HEAD.theybytesheaders), "\n")[1:]
+	forNothing := strings.Split(string(HEAD.thebuffer.B), "\n")[1:]
 
 	for _, res := range forNothing {
 		if !strings.Contains(res, ": ") {
@@ -76,7 +86,7 @@ func (HEAD *headers_struct) GetAll() map[string]string {
 }
 
 func (HEAD *headers_struct) Get(key string) string {
-	forNothing := strings.Split(string(HEAD.theybytesheaders), "\n")[1:]
+	forNothing := strings.Split(string(HEAD.thebuffer.B), "\n")[1:]
 
 	for _, res := range forNothing {
 		if !strings.Contains(res, ": ") {

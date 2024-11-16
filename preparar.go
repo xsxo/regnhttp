@@ -1,8 +1,7 @@
-package fiberhttp
+package regn
 
 import (
 	"encoding/json"
-	"log"
 	"net/url"
 	"strconv"
 	"strings"
@@ -25,8 +24,8 @@ type request struct {
 	userjson bool
 }
 
-func Request() request {
-	return request{Header: &ConnectionInformation{}}
+func Request() *request {
+	return &request{Header: &ConnectionInformation{}}
 }
 
 func (REQ *request) SetMethod(METHOD string) {
@@ -40,11 +39,9 @@ func (REQ *request) SetURL(Url string) {
 	Parse, err := url.Parse(Url)
 
 	if err != nil {
-		log.SetFlags(0)
-		log.Fatalln("FiberHTTP Error: Invalid URL  '" + err.Error() + "'")
+		panic("RegnHTTP Error: Invalid URL  '" + err.Error() + "'")
 	} else if Parse.Scheme == "" {
-		log.SetFlags(0)
-		log.Fatalln("FiberHTTP Error: Invalid URL '" + Url + "': No scheme supplied, Perhaps you meant 'https://" + Url + "' ?")
+		panic("RegnHTTP Error: Invalid URL '" + Url + "': No scheme supplied, Perhaps you meant 'https://" + Url + "' ?")
 	}
 
 	if Parse.Port() != "" {
@@ -56,8 +53,7 @@ func (REQ *request) SetURL(Url string) {
 	}
 
 	if Parse.Hostname() == "" {
-		log.SetFlags(0)
-		log.Fatalln("FiberHTTP Error: Invalid URL '" + Url + "': No host supplied")
+		panic("RegnHTTP Error: Invalid URL '" + Url + "': No host supplied")
 	} else {
 		REQ.Header.myhost = Parse.Hostname()
 	}
@@ -122,7 +118,7 @@ func (REQ *request) SetBody(RawBody string) {
 }
 
 func (REQ *request) SetJson(RawJson map[string]string) error {
-	NewErr := &FiberhttpError{}
+	NewErr := &RegnError{}
 	var err error
 
 	REQ.Header.raw = nil
@@ -139,7 +135,7 @@ func (REQ *request) SetJson(RawJson map[string]string) error {
 }
 
 func (REQ *request) release() error {
-	err := &FiberhttpError{}
+	err := &RegnError{}
 
 	if REQ.theybytesmethod == nil {
 		err.Message = "No URL supplied"

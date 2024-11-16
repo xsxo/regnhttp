@@ -3,15 +3,14 @@ package main
 // import library
 import (
 	"fmt"
-	"log"
-	"time"
+	"sync"
 
-	fiberhttp "github.com/xsxo/fiberhttp-go"
+	regn "github.com/xsxo/regnhttp"
 )
 
 func Example() {
 	// create client object for each goroutine
-	clt := fiberhttp.Client{}
+	clt := regn.Client{}
 
 	// set timeout connection
 	clt.Timeout = 20 // not required
@@ -21,41 +20,46 @@ func Example() {
 	// clt.Porxy("http://host:port")
 
 	// create request object
-	req := fiberhttp.Request()
+	req := regn.Request()
+
+	// create response object
+	res := regn.Response()
+	defer res.Close()
 
 	// set meothod
 	req.SetMethod("GET")
 
-	// set url
-	req.SetURL("https://httpbin.org/get?name=ndoshy")
+	// set url request + params
+	req.SetURL("http://httpbin.org/get?name=ndoshy")
 
 	// create connection with server before send request
 	err := clt.Connect(req) // not required
 
+	// check error
 	if err != nil {
-		log.SetFlags(0)
-		log.Fatal("Err:", err.Error())
+		panic("Err: " + err.Error())
 	} else {
 		fmt.Println("connected with 'httpbin.org' host")
 	}
 
 	// create automaticly response object
-	res, err := clt.Do(req)
+	err = clt.Do(req, res)
 
 	if err != nil {
-		log.SetFlags(0)
-		log.Fatal("Err:", err.Error())
+		panic("Err: " + err.Error())
 	}
 
-	// print status code of response
+	// read status code of response
 	fmt.Println(res.StatusCode())
+
+	// read body of response
+	fmt.Println(res.StringBody())
 
 	// read response with json format
 	Json, err := res.Json()
 
 	if err != nil {
-		log.SetFlags(0)
-		log.Fatal("Err:", err.Error())
+		panic("Err: " + err.Error())
 	}
 
 	args := Json["args"].(map[string]interface{})
@@ -69,10 +73,19 @@ func Example() {
 
 func main() {
 
+	// create client each function
+	// !! regn Client is'nt support pool connection
+
+	var wg sync.WaitGroup
 	for xo := 0; xo != 2; xo++ {
-		go Example()
+		wg.Add(1) // Increment the counter for each goroutine
+		go func() {
+			defer wg.Done()
+			Example()
+		}()
 	}
 
-	time.Sleep(200 * time.Second)
+	// Wait for all goroutines to finish
+	wg.Wait()
 
 }
