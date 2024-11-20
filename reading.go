@@ -59,7 +59,7 @@ func (RES *ResponseType) BodyString() string {
 func (RES *ResponseType) Body() []byte {
 	splied := bytes.SplitN(RES.Header.thebuffer.B, tow_lines, 2)
 
-	if len(splied) > 1 {
+	if len(splied) < 1 {
 		return nil
 	}
 

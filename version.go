@@ -7,7 +7,7 @@ var License string
 var Description string
 
 func init() {
-	Version = "v0.0.1-Beta"
+	Version = "v0.0.2-alpha"
 	Name = "REGN HTTP"
 	Author = "@xsxo GitHub"
 	License = "Apache-2.0"
