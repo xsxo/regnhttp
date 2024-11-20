@@ -21,6 +21,7 @@ func Example() {
 
 	// create request object
 	req := regn.Request()
+	defer req.Close()
 
 	// create response object
 	res := regn.Response()
@@ -49,13 +50,13 @@ func Example() {
 		panic("Err: " + err.Error())
 	}
 
-	// read status code of response
+	// read status code response
 	fmt.Println(res.StatusCode())
 
-	// read body of response
-	fmt.Println(res.StringBody())
+	// read string body response
+	fmt.Println(res.BodyString())
 
-	// read response with json format
+	// read json response
 	Json, err := res.Json()
 
 	if err != nil {

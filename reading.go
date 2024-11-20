@@ -11,34 +11,35 @@ import (
 )
 
 type headers_struct struct {
-	thebuffer *bytebufferpool.ByteBuffer
+	thebuffer bytebufferpool.ByteBuffer
+	// *thebuffer bytebufferpool.ByteBuffer
 }
 
-type response struct {
+type ResponseType struct {
 	Header *headers_struct
 }
 
-func Response() *response {
-	return &response{Header: &headers_struct{bytes_pool.Get()}}
+func Response() *ResponseType {
+	return &ResponseType{Header: &headers_struct{*bytes_pool.Get()}}
 }
 
-func (RES *response) Close() {
+func (RES *ResponseType) Close() {
 	RES.Header.thebuffer.Reset()
-	bytes_pool.Put(RES.Header.thebuffer)
+	bytes_pool.Put(&RES.Header.thebuffer)
 }
 
-func (RES *response) StatusCode() int {
+func (RES *ResponseType) StatusCode() int {
 	matches := status_code_regexp.FindSubmatch(RES.Header.thebuffer.B)
 	status_code, _ := strconv.Atoi(string(matches[1]))
 	return status_code
 }
 
-func (RES *response) Reason() string {
+func (RES *ResponseType) Reason() string {
 	matches := reason_regexp.FindSubmatch(RES.Header.thebuffer.B)
 	return string(matches[1])
 }
 
-func (RES *response) StringBody() (string, error) {
+func (RES *ResponseType) BodyString() (string, error) {
 
 	body := bytes.SplitN(RES.Header.thebuffer.B, tow_lines, 2)[1]
 	if !utf8.Valid(body) {
@@ -48,11 +49,11 @@ func (RES *response) StringBody() (string, error) {
 	return string(body), nil
 }
 
-func (RES *response) Body() []byte {
+func (RES *ResponseType) Body() []byte {
 	return bytes.SplitN(RES.Header.thebuffer.B, tow_lines, 2)[1]
 }
 
-func (RES *response) Json() (map[string]interface{}, error) {
+func (RES *ResponseType) Json() (map[string]interface{}, error) {
 	NewErr := &RegnError{}
 
 	var result map[string]interface{}

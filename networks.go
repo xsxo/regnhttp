@@ -14,7 +14,7 @@ import (
 type __inforamtion__ struct {
 	use_proxy      bool
 	host_connected string
-	connection     *net.Conn
+	connection     net.Conn
 	run            bool
 
 	peeker  *bufio.Reader
@@ -35,7 +35,7 @@ func (e *RegnError) Error() string {
 	return "RegnHTTP Error: " + e.Message
 }
 
-func ___connect_net___(host string, port string, thetimeout int) (*net.Conn, error) {
+func ___connect_net___(host string, port string, thetimeout int) (net.Conn, error) {
 	if thetimeout == 0 {
 		thetimeout = 10
 	}
@@ -49,11 +49,11 @@ func ___connect_net___(host string, port string, thetimeout int) (*net.Conn, err
 			return nil, er
 		}
 
-		TheConn = net.Conn(TheConn)
-		return &TheConn, nil
+		// TheConn = net.Conn(TheConn)
+		return TheConn, nil
 
 	} else {
-		TlsConn, err := tls.Dial("tcp4", host+":"+port, &tls.Config{ServerName: host})
+		TheConn, err := tls.Dial("tcp4", host+":"+port, &tls.Config{ServerName: host})
 
 		if err != nil {
 			er := &RegnError{}
@@ -61,8 +61,9 @@ func ___connect_net___(host string, port string, thetimeout int) (*net.Conn, err
 			return nil, er
 		}
 
-		TheConn := net.Conn(TlsConn)
-		return &TheConn, nil
+		// TheConn := net.Conn(TlsConn)
+		// return &TheConn
+		return TheConn, nil
 	}
 }
 
@@ -73,33 +74,35 @@ func ___connect_to_host___(cn *Client, host_port string, authorization string) e
 
 	therequest := Request()
 	therequest.SetMethod("CONNECT")
-	therequest.theybytesapi = []byte(host_port)
+	therequest.theybytesapi = host_port
 	therequest.Header.Set("Host", host_port)
 	therequest.Header.Set("Authorization", authorization)
 	therequest.release()
 
-	cn.confgiuration.flusher.Write(therequest.Header.raw)
+	cn.confgiuration.flusher.Write(therequest.Header.raw.Bytes())
 	if err := cn.confgiuration.flusher.Flush(); err != nil {
-		(*cn.confgiuration.connection).Close()
+		// cn.confgiuration.connection.Close()
+		cn.confgiuration.connection.Close()
 		cn.close_line()
 		return &RegnError{Message: "Field connection with '" + host_port + "' addr"}
 	}
+	therequest.Close()
 
 	cn.confgiuration.peeker.Peek(1)
 
 	res, err := cn.confgiuration.peeker.Peek(cn.confgiuration.peeker.Buffered())
 
 	if err != nil {
-		(*cn.confgiuration.connection).Close()
+		cn.confgiuration.connection.Close()
 		cn.close_line()
-		(*cn.confgiuration.connection) = nil
+		cn.confgiuration.connection = nil
 		return &RegnError{Message: "Field connection with '" + host_port + "' addr"}
 	}
 
 	if len(code_regexp.FindSubmatch(res)) == 0 {
-		(*cn.confgiuration.connection).Close()
+		cn.confgiuration.connection.Close()
 		cn.close_line()
-		(*cn.confgiuration.connection) = nil
+		cn.confgiuration.connection = nil
 		return &RegnError{Message: "Field connection with '" + host_port + "' addr"}
 	}
 
@@ -111,7 +114,7 @@ func (cn *Client) Porxy(Url string) {
 		cn.confgiuration = &__inforamtion__{}
 	}
 	if cn.confgiuration.connection != nil {
-		(*cn.confgiuration.connection).Close()
+		cn.confgiuration.connection.Close()
 		cn.close_line()
 		cn.confgiuration.connection = nil
 	}
@@ -125,9 +128,9 @@ func (cn *Client) Porxy(Url string) {
 	}
 
 	if Parse.Host == "" {
-		panic("RegnHTTP error: No host proxy url supplied.")
+		panic("REGN HTTP error: No host proxy url supplied.")
 	} else if Parse.Port() == "" {
-		panic("RegnHTTP error: No host proxy url supplied.")
+		panic("REGN HTTP error: No host proxy url supplied.")
 	}
 
 	cn.confgiuration.host_proxy = Parse.Hostname()
@@ -148,7 +151,7 @@ func (cn *Client) Close() {
 	}
 
 	if cn.confgiuration.connection != nil {
-		(*cn.confgiuration.connection).Close()
+		cn.confgiuration.connection.Close()
 		cn.close_line()
 		cn.confgiuration.connection = nil
 	}
@@ -172,10 +175,14 @@ func (cn *Client) create_line() {
 	cn.confgiuration.flusher = get_writer(cn.confgiuration.connection)
 }
 
-func (cn *Client) Connect(REQ *request) error {
-
+func (cn *Client) Connect(REQ *RequestType) error {
 	if cn.confgiuration == nil {
 		cn.confgiuration = &__inforamtion__{}
+	}
+
+	if cn.confgiuration.run {
+		cn.confgiuration.run = false
+		panic("REGN HTTP Error: The client struct isn't support pool connections\ncreate a client for each connection || use sync.Pool for pool connections")
 	}
 
 	if cn.confgiuration.use_proxy {
@@ -205,9 +212,9 @@ func (cn *Client) Connect(REQ *request) error {
 			config := &tls.Config{
 				ServerName: REQ.Header.myhost,
 			}
-			tlsConn := tls.Client(*cn.confgiuration.connection, config)
-			tcc := net.Conn(tlsConn)
-			cn.confgiuration.connection = &tcc
+			tlsConn := tls.Client(cn.confgiuration.connection, config)
+			// tcc := net.Conn(tlsConn)
+			cn.confgiuration.connection = tlsConn
 		}
 
 	} else {
@@ -225,7 +232,7 @@ func (cn *Client) Connect(REQ *request) error {
 			var err error
 			if cn.confgiuration.connection != nil {
 				cn.close_line()
-				(*cn.confgiuration.connection).Close()
+				cn.confgiuration.connection.Close()
 				cn.confgiuration.connection = nil
 			}
 
@@ -242,24 +249,15 @@ func (cn *Client) Connect(REQ *request) error {
 	return nil
 }
 
-func (cn *Client) Send(REQ *request, RES *response) error {
-	if cn.confgiuration == nil {
-		cn.confgiuration = &__inforamtion__{}
-	}
-
-	if cn.confgiuration.run {
-		cn.confgiuration.run = false
-		panic("RegnHTTP Error: The client struct isn't support pool connections\ncreate a client for each connection || use sync.Pool for pool connections")
-	}
-
-	cn.confgiuration.run = true
-
+func (cn *Client) Send(REQ *RequestType, RES *ResponseType) error {
 	if NewErr := cn.Connect(REQ); NewErr != nil {
 		cn.confgiuration.run = false
 		return NewErr
 	}
 
-	if REQ.Header.raw == nil {
+	cn.confgiuration.run = true
+
+	if REQ.Header.raw.Len() == 0 {
 		if NewErr := REQ.release(); NewErr != nil {
 			cn.confgiuration.run = false
 			return NewErr
@@ -267,18 +265,13 @@ func (cn *Client) Send(REQ *request, RES *response) error {
 	}
 
 	if cn.Deadline != 0 {
-		(*cn.confgiuration.connection).SetDeadline(time.Now().Add(time.Duration(cn.Deadline) * time.Second))
+		cn.confgiuration.connection.SetDeadline(time.Now().Add(time.Duration(cn.Deadline) * time.Second))
 		cn.Deadline = 0
 	}
 
-	cn.confgiuration.flusher.Write(REQ.Header.raw)
-
-	if (*RES.Header.thebuffer).B != nil {
-		(*RES.Header.thebuffer).Reset()
-	}
-
+	cn.confgiuration.flusher.Write(REQ.Header.raw.Bytes())
 	if NewErr := cn.confgiuration.flusher.Flush(); NewErr != nil {
-		(*cn.confgiuration.connection).Close()
+		cn.confgiuration.connection.Close()
 		cn.close_line()
 		cn.confgiuration.connection = nil
 		cn.confgiuration.host_connected = ""
@@ -286,25 +279,27 @@ func (cn *Client) Send(REQ *request, RES *response) error {
 		return &RegnError{Message: " Error writing: " + NewErr.Error()}
 	}
 
+	RES.Header.thebuffer.Reset()
 	for {
 		cn.confgiuration.peeker.Peek(1)
-		test, err := cn.confgiuration.peeker.Peek(cn.confgiuration.peeker.Buffered())
-		le := len(test)
+		le := cn.confgiuration.peeker.Buffered()
+		test, _ := cn.confgiuration.peeker.Peek(le)
+		RES.Header.thebuffer.Write(test)
 		cn.confgiuration.peeker.Discard(le)
-		(*RES.Header.thebuffer).Write(test)
 
-		if err != nil {
-			(*cn.confgiuration.connection).Close()
-			cn.close_line()
-			cn.confgiuration.connection = nil
-			cn.confgiuration.host_connected = ""
-
-			cn.confgiuration.run = false
-
-			return &RegnError{Message: "Error reading: " + err.Error()}
+		if bytes.Contains(RES.Header.thebuffer.B, tow_lines) {
+			contentLengthMatch := contetre.FindSubmatch(RES.Header.thebuffer.B) // changed form (*RES.Header.thebuffer).B
+			if len(contentLengthMatch) > 1 {
+				contentLength, _ := strconv.Atoi(string(contentLengthMatch[1]))
+				if len(bytes.SplitN(RES.Header.thebuffer.B, tow_lines, 2)[1]) >= contentLength {
+					break
+				}
+			} else if bytes.Contains(RES.Header.thebuffer.B, zero_lines) {
+				break
+			}
 
 		} else if le == 0 {
-			(*cn.confgiuration.connection).Close()
+			cn.confgiuration.connection.Close()
 			cn.close_line()
 			cn.confgiuration.connection = nil
 			cn.confgiuration.host_connected = ""
@@ -313,31 +308,17 @@ func (cn *Client) Send(REQ *request, RES *response) error {
 
 			return nil
 		}
-
-		if bytes.Contains((*RES.Header.thebuffer).B, tow_lines) {
-			parts := bytes.SplitN((*RES.Header.thebuffer).B, tow_lines, 2)
-			body := parts[1]
-
-			contentLengthMatch := contetre.FindSubmatch((*RES.Header.thebuffer).B)
-			if len(contentLengthMatch) > 1 {
-				contentLength, _ := strconv.Atoi(string(contentLengthMatch[1]))
-				if len(body) >= contentLength {
-					break
-				}
-			} else if bytes.Contains((*RES.Header.thebuffer).B, zero_lines) {
-				break
-			}
-		}
 	}
 
 	cn.confgiuration.run = false
 	return nil
+
 }
 
-func (cn *Client) Do(REQ *request, RES *response) error {
+func (cn *Client) Do(REQ *RequestType, RES *ResponseType) error {
 	return cn.Send(REQ, RES)
 }
 
-func (cn *Client) Action(REQ *request, RES *response) error {
+func (cn *Client) Action(REQ *RequestType, RES *ResponseType) error {
 	return cn.Send(REQ, RES)
 }

@@ -28,26 +28,26 @@ var (
 	reason_regexp      *regexp.Regexp = regexp.MustCompile(`HTTP/1.1 (\d{3} .*)`)
 )
 
-func get_reader(Conn *net.Conn) *bufio.Reader {
+func get_reader(Conn net.Conn) *bufio.Reader {
 	nr := nrpool.Get()
 
 	if nr == nil {
-		return bufio.NewReader(*Conn)
+		return bufio.NewReader(Conn)
 	}
 
 	nrr, _ := nr.(*bufio.Reader)
-	nrr.Reset(*Conn)
+	nrr.Reset(Conn)
 	return nrr
 }
 
-func get_writer(Conn *net.Conn) *bufio.Writer {
+func get_writer(Conn net.Conn) *bufio.Writer {
 	nw := nwpool.Get()
 
 	if nw == nil {
-		return bufio.NewWriter(*Conn)
+		return bufio.NewWriter(Conn)
 	}
 
 	nww, _ := nw.(*bufio.Writer)
-	nww.Reset(*Conn)
+	nww.Reset(Conn)
 	return nww
 }

@@ -5,37 +5,43 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+
+	"github.com/valyala/bytebufferpool"
 )
 
 type ConnectionInformation struct {
 	myport          string
 	myhost          string
 	thebytesheaders map[string]string
-	// run             bool
-	raw []byte
+	raw             bytebufferpool.ByteBuffer
 }
 
-type request struct {
-	theybytesmethod []byte
-	theybytesapi    []byte
+type RequestType struct {
+	theybytesmethod string
+	theybytesapi    string
 	theybytesbody   []byte
 	Header          *ConnectionInformation
 
 	userjson bool
 }
 
-func Request() *request {
-	return &request{Header: &ConnectionInformation{}}
+func Request() *RequestType {
+	return &RequestType{Header: &ConnectionInformation{raw: *bytes_pool.Get()}}
 }
 
-func (REQ *request) SetMethod(METHOD string) {
-	REQ.Header.raw = nil
-
-	REQ.theybytesmethod = []byte(strings.ToUpper(METHOD))
+func (REQ *RequestType) Close() {
+	REQ.Header.raw.Reset()
+	bytes_pool.Put(&REQ.Header.raw)
 }
 
-func (REQ *request) SetURL(Url string) {
-	REQ.Header.raw = nil
+func (REQ *RequestType) SetMethod(METHOD string) {
+	REQ.Header.raw.Reset()
+
+	REQ.theybytesmethod = strings.ToUpper(METHOD)
+}
+
+func (REQ *RequestType) SetURL(Url string) {
+	REQ.Header.raw.Reset()
 	Parse, err := url.Parse(Url)
 
 	if err != nil {
@@ -59,18 +65,18 @@ func (REQ *request) SetURL(Url string) {
 	}
 
 	if Parse.Path == "" {
-		REQ.theybytesapi = []byte("/")
+		REQ.theybytesapi = "/"
 	} else {
-		REQ.theybytesapi = []byte(Parse.Path)
+		REQ.theybytesapi = Parse.Path
 	}
 
 	if Parse.RawQuery != "" {
-		REQ.theybytesapi = append(REQ.theybytesapi, []byte("?"+Parse.RawQuery)...)
+		REQ.theybytesapi = REQ.theybytesapi + "?" + Parse.RawQuery
 	}
 }
 
 func (REQ *ConnectionInformation) Set(key string, value string) {
-	REQ.raw = nil
+	REQ.raw.Reset()
 
 	if REQ.thebytesheaders == nil {
 		REQ.thebytesheaders = make(map[string]string)
@@ -80,7 +86,7 @@ func (REQ *ConnectionInformation) Set(key string, value string) {
 }
 
 func (REQ *ConnectionInformation) Add(key string, value string) {
-	REQ.raw = nil
+	REQ.raw.Reset()
 
 	if REQ.thebytesheaders == nil {
 		REQ.thebytesheaders = make(map[string]string)
@@ -90,7 +96,7 @@ func (REQ *ConnectionInformation) Add(key string, value string) {
 }
 
 func (REQ *ConnectionInformation) Del(key string) {
-	REQ.raw = nil
+	REQ.raw.Reset()
 
 	if REQ.thebytesheaders == nil {
 		return
@@ -101,7 +107,7 @@ func (REQ *ConnectionInformation) Del(key string) {
 
 func (REQ *ConnectionInformation) Remove(key string) {
 
-	REQ.raw = nil
+	REQ.raw.Reset()
 
 	if REQ.thebytesheaders == nil {
 		return
@@ -110,18 +116,23 @@ func (REQ *ConnectionInformation) Remove(key string) {
 	delete(REQ.thebytesheaders, key)
 }
 
-func (REQ *request) SetBody(RawBody string) {
-	REQ.Header.raw = nil
+func (REQ *RequestType) SetBody(RawBody []byte) {
+	REQ.Header.raw.Reset()
+	REQ.userjson = false
+	REQ.theybytesbody = RawBody
+}
 
+func (REQ *RequestType) SetBodyString(RawBody string) {
+	REQ.Header.raw.Reset()
 	REQ.userjson = false
 	REQ.theybytesbody = []byte(RawBody)
 }
 
-func (REQ *request) SetJson(RawJson map[string]string) error {
+func (REQ *RequestType) SetJson(RawJson map[string]string) error {
 	NewErr := &RegnError{}
 	var err error
 
-	REQ.Header.raw = nil
+	REQ.Header.raw.Reset()
 
 	REQ.userjson = true
 	REQ.theybytesbody, err = json.Marshal(RawJson)
@@ -134,55 +145,45 @@ func (REQ *request) SetJson(RawJson map[string]string) error {
 	return nil
 }
 
-func (REQ *request) release() error {
+func (REQ *RequestType) release() error {
 	err := &RegnError{}
 
-	if REQ.theybytesmethod == nil {
+	if len(REQ.theybytesmethod) == 0 {
 		err.Message = "No URL supplied"
 		return err
 	}
 
-	REQ.Header.raw = nil
-	REQ.Header.raw = REQ.theybytesmethod
-	REQ.Header.raw = append(REQ.Header.raw, 32)
-	REQ.Header.raw = append(REQ.Header.raw, REQ.theybytesapi...)
-	REQ.Header.raw = append(REQ.Header.raw, 32, 72, 84, 84, 80, 47, 49, 46, 49, 13, 10)
-
-	if REQ.Header.thebytesheaders == nil {
-		REQ.Header.thebytesheaders = make(map[string]string)
-	}
-
-	var keys []string
-	for key := range REQ.Header.thebytesheaders {
-		keys = append(keys, strings.ToLower(key))
-	}
-	StringHeaders := strings.Join(keys, ", ")
-
-	if !strings.Contains(StringHeaders, "user-agent") {
-		REQ.Header.thebytesheaders["User-Agent"] = "Mozilla/5.0 Firefox/132.0"
-	}
-
-	if !strings.Contains(StringHeaders, "host") {
-		REQ.Header.thebytesheaders["Host"] = REQ.Header.myhost
-	}
-
-	if !strings.Contains(StringHeaders, "connection") {
-		REQ.Header.thebytesheaders["Connection"] = "Keep-Alive"
-	}
-
-	if REQ.theybytesbody != nil && !strings.Contains(StringHeaders, "content-length") {
-		REQ.Header.thebytesheaders["Content-Length"] = strconv.Itoa(len(REQ.theybytesbody))
-	}
-
-	if REQ.userjson && !strings.Contains(StringHeaders, "content-type") {
-		REQ.Header.thebytesheaders["Content-Type"] = "application/json"
-	}
+	REQ.Header.raw.Reset()
+	REQ.Header.raw.WriteString(REQ.theybytesmethod)
+	// REQ.Header.raw.WriteString("\r")
+	REQ.Header.raw.WriteString(" " + REQ.theybytesapi)
+	REQ.Header.raw.WriteString(" HTTP/1.1\r\n")
 
 	for key, value := range REQ.Header.thebytesheaders {
-		REQ.Header.raw = append(REQ.Header.raw, []byte(key+": "+value+"\r\n")...)
+		REQ.Header.raw.WriteString(key + ": " + value + "\r\n")
 	}
-	REQ.Header.raw = append(REQ.Header.raw, 13, 10)
-	REQ.Header.raw = append(REQ.Header.raw, []byte(REQ.theybytesbody)...)
+
+	lower := strings.ToLower(REQ.Header.raw.String())
+
+	if !strings.Contains(lower, "user-agent: ") {
+		REQ.Header.raw.WriteString("User-Agent: " + Name + "/" + Version + Author + "\r\n")
+	}
+
+	if !strings.Contains(lower, "host: ") {
+		REQ.Header.raw.WriteString("Host: " + REQ.Header.myhost + "\r\n")
+	}
+
+	if !strings.Contains(lower, "connection: ") {
+		REQ.Header.raw.WriteString("Connection: Keep-Alive\r\n")
+	}
+
+	if !strings.Contains(lower, "content-length: ") {
+		REQ.Header.raw.WriteString("Content-Length: " + strconv.Itoa(len(REQ.theybytesbody)) + "\r\n")
+	}
+
+	REQ.Header.raw.WriteString("\r\n")
+
+	REQ.Header.raw.Write(REQ.theybytesbody)
 
 	return nil
 }
