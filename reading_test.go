@@ -38,6 +38,14 @@ func TestReadingResponse(T *testing.T) {
 		T.Error("Error StatusCode: " + strconv.Itoa(res.StatusCode()))
 	}
 
+	if res.Body() == nil {
+		T.Error("Error: RES.Body function")
+	}
+
+	if res.BodyString() == "" {
+		T.Error("Error: RES.BodyString function")
+	}
+
 	JsonRES, Err := res.Json()
 
 	if Err != nil {
