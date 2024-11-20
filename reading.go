@@ -30,12 +30,20 @@ func (RES *ResponseType) Close() {
 func (RES *ResponseType) StatusCode() int {
 	matches := status_code_regexp.FindSubmatch(RES.Header.thebuffer.B)
 	status_code, _ := strconv.Atoi(string(matches[1]))
+
+	matches[0] = nil
+	matches[1] = nil
 	return status_code
 }
 
 func (RES *ResponseType) Reason() string {
 	matches := reason_regexp.FindSubmatch(RES.Header.thebuffer.B)
-	return string(matches[1])
+	to_return := string(matches[1])
+
+	matches[0] = nil
+	matches[1] = nil
+
+	return to_return
 }
 
 func (RES *ResponseType) BodyString() string {
