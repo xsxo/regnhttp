@@ -28,10 +28,16 @@ func Example() {
 	defer res.Close()
 
 	// set meothod
-	req.SetMethod("GET")
+	req.SetMethod("POST")
 
 	// set url request + params
 	req.SetURL("http://httpbin.org/get?name=ndoshy")
+
+	// set header
+	req.Header.Set("Authorization", "base64-code")
+
+	// set body
+	req.SetBodyString("Hello World!")
 
 	// create connection with server before send request
 	err := clt.Connect(req) // not required
