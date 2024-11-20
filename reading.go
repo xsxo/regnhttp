@@ -69,7 +69,7 @@ func (RES *ResponseType) Json() (map[string]interface{}, error) {
 
 func (HEAD *headers_struct) GetAll() map[string]string {
 	forReturn := make(map[string]string)
-	forNothing := strings.Split(string(HEAD.thebuffer.B), "\n")[1:]
+	forNothing := strings.Split(HEAD.thebuffer.String(), "\n")[1:]
 
 	for _, res := range forNothing {
 		if !strings.Contains(res, ": ") {
@@ -87,7 +87,7 @@ func (HEAD *headers_struct) GetAll() map[string]string {
 }
 
 func (HEAD *headers_struct) Get(key string) string {
-	forNothing := strings.Split(string(HEAD.thebuffer.B), "\n")[1:]
+	forNothing := strings.Split(HEAD.thebuffer.String(), "\n")[1:]
 
 	for _, res := range forNothing {
 		if !strings.Contains(res, ": ") {

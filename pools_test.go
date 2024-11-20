@@ -33,7 +33,7 @@ func TestBytesPool(T *testing.T) {
 func TestWriterPool(T *testing.T) {
 	buffer := bytes.Buffer{}
 
-	nwpool.Put(*bufio.NewWriter(&buffer))
+	nwpool.Put(bufio.NewWriter(&buffer))
 
 	writer := nwpool.Get().(*bufio.Writer)
 	writer.Reset(&buffer)
@@ -50,15 +50,15 @@ func TestWriterPool(T *testing.T) {
 }
 
 func TestReaderPool(T *testing.T) {
-	buffer := bytes.Buffer{}
-
-	nwpool.Put(*bufio.NewReader(&buffer))
+	var buffer *bytes.Buffer = &bytes.Buffer{}
+	nwpool.Put(bufio.NewReader(buffer))
 
 	Reader := nwpool.Get().(*bufio.Reader)
-	Reader.Reset(&buffer)
+	Reader.Reset(buffer)
 
 	buffer.WriteString(Name + " - " + Version)
 
+	Reader.Peek(1)
 	buffered := Reader.Buffered()
 
 	if buffered == 0 {
@@ -66,12 +66,12 @@ func TestReaderPool(T *testing.T) {
 	}
 
 	Readed, NewErr := Reader.Peek(buffered)
-
 	if NewErr != nil || len(Readed) != buffered {
 		T.Error("Error use Reader Pool -> Peek function")
 	}
 
-	if Discarded, NewErr := Reader.Discard(len(Readed)); NewErr != nil || Discarded != buffered || buffer.Len() != 0 {
+	Discarded, NewErr := Reader.Discard(len(Readed))
+	if NewErr != nil || Discarded != buffered || buffer.Len() != 0 {
 		T.Error("Error use Reader Pool -> Discard function")
 	}
 

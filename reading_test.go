@@ -44,14 +44,14 @@ func TestReadingResponse(T *testing.T) {
 		T.Error("Error: parsing map to json -> RES.Json function")
 	}
 
-	JsonJson := JsonRES["Json"].(map[string]interface{})
+	JsonJson := JsonRES["json"].(map[string]interface{})
 
 	if JsonJson["name"] != JsonREQ["name"] {
 		T.Error("Error: json parsing -> RES.Json + REQ.SetJson functions")
 	}
 
-	if res.Header.Get("User-Agent") == "" {
-		T.Error("Error: header parsing -> REQ.Header.Set(User-Agent) function")
+	if res.Header.Get("Connection") != "keep-alive" {
+		T.Error("Error: header parsing -> res.Header.Get(Connection) function")
 	}
 
 }
