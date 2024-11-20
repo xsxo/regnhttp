@@ -20,5 +20,5 @@ RegnHTTP it may lack many features, but this is intentional, REGN HTTP excludes 
 - Built-in Socket Proxy Connection
 
 ## How To Use RegnHTTP
-- insatll the package: `go get github.com/xsxo/regnhttp`
+- insatll the package: `go install github.com/xsxo/regnhttp@latest`
 - Take a lock at The Examples folder: [Examples](https://github.com/xsxo/regnhttp/tree/master/examples)
