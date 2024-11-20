@@ -1,0 +1,5 @@
+vendor/
+note.txt
+benchmarks/
+tests/
+benchmark_regn_test.go
