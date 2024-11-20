@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"strconv"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/valyala/bytebufferpool"
 )
@@ -39,18 +38,25 @@ func (RES *ResponseType) Reason() string {
 	return string(matches[1])
 }
 
-func (RES *ResponseType) BodyString() (string, error) {
-
-	body := bytes.SplitN(RES.Header.thebuffer.B, tow_lines, 2)[1]
-	if !utf8.Valid(body) {
-		return "", &RegnError{Message: "Field decode body to UTF-8 string"}
+func (RES *ResponseType) BodyString() string {
+	out := strings.SplitN(RES.Header.thebuffer.String(), "\r\n\r\n", 2)
+	if len(out) < 1 {
+		return ""
 	}
 
-	return string(body), nil
+	out[0] = ""
+	return out[1]
 }
 
 func (RES *ResponseType) Body() []byte {
-	return bytes.SplitN(RES.Header.thebuffer.B, tow_lines, 2)[1]
+	splied := bytes.SplitN(RES.Header.thebuffer.B, tow_lines, 2)
+
+	if len(splied) > 1 {
+		return nil
+	}
+
+	splied[0] = nil
+	return splied[1]
 }
 
 func (RES *ResponseType) Json() (map[string]interface{}, error) {

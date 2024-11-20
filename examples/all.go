@@ -28,10 +28,10 @@ func Example() {
 	defer res.Close()
 
 	// set meothod
-	req.SetMethod("POST")
+	req.SetMethod(regn.MethodPost)
 
 	// set url request + params
-	req.SetURL("http://httpbin.org/get?name=ndoshy")
+	req.SetURL("http://httpbin.org/post?name=ndoshy")
 
 	// set header
 	req.Header.Set("Authorization", "base64-code")

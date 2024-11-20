@@ -73,13 +73,13 @@ func ___connect_to_host___(cn *Client, host_port string, authorization string) e
 	cn.create_line()
 
 	therequest := Request()
-	therequest.SetMethod("CONNECT")
+	therequest.SetMethod(MethodConnect)
 	therequest.theybytesapi = host_port
 	therequest.Header.Set("Host", host_port)
 	therequest.Header.Set("Authorization", authorization)
 	therequest.release()
 
-	cn.confgiuration.flusher.Write(therequest.Header.raw.Bytes())
+	cn.confgiuration.flusher.Write(therequest.Header.raw.B)
 	if err := cn.confgiuration.flusher.Flush(); err != nil {
 		// cn.confgiuration.connection.Close()
 		cn.confgiuration.connection.Close()
@@ -109,7 +109,7 @@ func ___connect_to_host___(cn *Client, host_port string, authorization string) e
 	return nil
 }
 
-func (cn *Client) Porxy(Url string) {
+func (cn *Client) Proxy(Url string) {
 	if cn.confgiuration == nil {
 		cn.confgiuration = &__inforamtion__{}
 	}
@@ -269,7 +269,7 @@ func (cn *Client) Send(REQ *RequestType, RES *ResponseType) error {
 		cn.Deadline = 0
 	}
 
-	cn.confgiuration.flusher.Write(REQ.Header.raw.Bytes())
+	cn.confgiuration.flusher.Write(REQ.Header.raw.B)
 	if NewErr := cn.confgiuration.flusher.Flush(); NewErr != nil {
 		cn.confgiuration.connection.Close()
 		cn.close_line()
@@ -283,14 +283,28 @@ func (cn *Client) Send(REQ *RequestType, RES *ResponseType) error {
 	for {
 		cn.confgiuration.peeker.Peek(1)
 		le := cn.confgiuration.peeker.Buffered()
-		test, _ := cn.confgiuration.peeker.Peek(le)
-		RES.Header.thebuffer.Write(test)
+		if le == 0 {
+			cn.confgiuration.connection.Close()
+			cn.close_line()
+			cn.confgiuration.connection = nil
+			cn.confgiuration.host_connected = ""
+
+			cn.confgiuration.run = false
+			return nil
+		}
+
+		peeked, _ := cn.confgiuration.peeker.Peek(le)
 		cn.confgiuration.peeker.Discard(le)
+		RES.Header.thebuffer.Write(peeked)
+		peeked = nil
 
 		if bytes.Contains(RES.Header.thebuffer.B, tow_lines) {
 			contentLengthMatch := contetre.FindSubmatch(RES.Header.thebuffer.B) // changed form (*RES.Header.thebuffer).B
 			if len(contentLengthMatch) > 1 {
 				contentLength, _ := strconv.Atoi(string(contentLengthMatch[1]))
+				contentLengthMatch[0] = nil
+				contentLengthMatch[1] = nil
+
 				if len(bytes.SplitN(RES.Header.thebuffer.B, tow_lines, 2)[1]) >= contentLength {
 					break
 				}
@@ -298,15 +312,6 @@ func (cn *Client) Send(REQ *RequestType, RES *ResponseType) error {
 				break
 			}
 
-		} else if le == 0 {
-			cn.confgiuration.connection.Close()
-			cn.close_line()
-			cn.confgiuration.connection = nil
-			cn.confgiuration.host_connected = ""
-
-			cn.confgiuration.run = false
-
-			return nil
 		}
 	}
 
