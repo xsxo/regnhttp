@@ -9,7 +9,7 @@ RegnHTTP it may lack many features, but this is intentional, REGN HTTP excludes 
 - Redirects Requests
 - Pool Connection (you can create one by yourself using sync.Pool)
 
-## Features (What makes REGN HTTP)
+## Features
 - `Connect` Function (create connection with server before send requests)
 - Auto Reconnecting when The Server Disconnect
 - Reducing pressure on The Garbage Collector
