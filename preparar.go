@@ -1,6 +1,7 @@
 package regn
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/url"
 	"strconv"
@@ -10,23 +11,23 @@ import (
 )
 
 type ConnectionInformation struct {
-	myport          string
-	myhost          string
-	thebytesheaders map[string]string
-	raw             bytebufferpool.ByteBuffer
+	myport string
+	myhost string
+	raw    bytebufferpool.ByteBuffer
 }
 
 type RequestType struct {
-	theybytesmethod string
-	theybytesapi    string
-	theybytesbody   []byte
-	Header          *ConnectionInformation
-
-	userjson bool
+	Header *ConnectionInformation
 }
 
 func Request() *RequestType {
-	return &RequestType{Header: &ConnectionInformation{raw: *bytes_pool.Get()}}
+	to_return := &RequestType{Header: &ConnectionInformation{raw: *bytes_pool.Get()}}
+	to_return.Header.raw.WriteString("S S HTTP/1.1\r\n")
+	to_return.Header.raw.WriteString("User-Agent: " + Name + "/" + Version + Author + "\r\n")
+	to_return.Header.raw.WriteString("Connection: Keep-Alive\r\n")
+	to_return.Header.raw.WriteString("\r\n")
+
+	return to_return
 }
 
 func (REQ *RequestType) Close() {
@@ -35,13 +36,22 @@ func (REQ *RequestType) Close() {
 }
 
 func (REQ *RequestType) SetMethod(METHOD string) {
-	REQ.Header.raw.Reset()
+	TheMethod := []byte(strings.ToUpper(METHOD))
+	METHOD = ""
 
-	REQ.theybytesmethod = strings.ToUpper(METHOD)
+	lines := bytes.Split(REQ.Header.raw.B, space_line)
+
+	lines[0] = TheMethod
+	TheMethod = nil
+
+	new_requests := bytes.Join(lines, space_line)
+
+	REQ.Header.raw.Reset()
+	REQ.Header.raw.Write(new_requests)
+	new_requests = nil
 }
 
 func (REQ *RequestType) SetURL(Url string) {
-	REQ.Header.raw.Reset()
 	Parse, err := url.Parse(Url)
 
 	if err != nil {
@@ -64,126 +74,220 @@ func (REQ *RequestType) SetURL(Url string) {
 		REQ.Header.myhost = Parse.Hostname()
 	}
 
+	var api []byte
 	if Parse.Path == "" {
-		REQ.theybytesapi = "/"
+		api = []byte("/")
 	} else {
-		REQ.theybytesapi = Parse.Path
+		api = []byte(Parse.Path)
 	}
 
 	if Parse.RawQuery != "" {
-		REQ.theybytesapi = REQ.theybytesapi + "?" + Parse.RawQuery
+		query := []byte("?" + Parse.RawQuery)
+		api = append(api, query...)
+		query = nil
 	}
+
+	lines := bytes.Split(REQ.Header.raw.B, space_line)
+
+	lines[1] = api
+	new_requests := bytes.Join(lines, space_line)
+	api = nil
+
+	REQ.Header.raw.Reset()
+	REQ.Header.raw.Write(new_requests)
+
+	new_requests = nil
+
+	REQ.Header.Set("Host", REQ.Header.myhost)
 }
 
 func (REQ *ConnectionInformation) Set(key string, value string) {
-	REQ.raw.Reset()
+	data := REQ.raw.B
+	lowerSearch := []byte(strings.ToLower(key + ": "))
+	lowerData := bytes.ToLower(data)
 
-	if REQ.thebytesheaders == nil {
-		REQ.thebytesheaders = make(map[string]string)
+	start := bytes.Index(lowerData, lowerSearch)
+	lowerSearch = nil
+
+	if start != -1 {
+		end := bytes.Index(lowerData[start:], one_line)
+		end += start + 2
+		data = append(data[:start], data[end:]...)
+		// fmt.Println("end: ", end)
+		// fmt.Println("start: ", start)
+	} else {
+		start = bytes.Index(lowerData, one_line) + 2
 	}
 
-	REQ.thebytesheaders[key] = value
+	newHeader := []byte(key + ": " + value + "\r\n")
+	// insertPosition := bytes.Index(data, one_line) + 2
+	// fmt.Println("insertPosition: ", insertPosition)
+	// data = append(data[:insertPosition], append(newHeader, data[insertPosition:]...)...)
+
+	data = append(data[:start], append(newHeader, data[start:]...)...)
+	newHeader = nil
+
+	REQ.raw.Reset()
+	REQ.raw.Write(data)
+
+	lowerData = nil
+	data = nil
 }
 
 func (REQ *ConnectionInformation) Add(key string, value string) {
-	REQ.raw.Reset()
+	data := REQ.raw.B
+	lowerSearch := []byte(strings.ToLower(key + ": "))
+	lowerData := bytes.ToLower(data)
 
-	if REQ.thebytesheaders == nil {
-		REQ.thebytesheaders = make(map[string]string)
+	start := bytes.Index(lowerData, lowerSearch)
+	lowerSearch = nil
+
+	if start != -1 {
+		end := bytes.Index(lowerData[start:], one_line)
+		end += start + 2
+		data = append(data[:start], data[end:]...)
+		// fmt.Println("end: ", end)
+		// fmt.Println("start: ", start)
+	} else {
+		start = bytes.Index(lowerData, one_line)
 	}
 
-	REQ.thebytesheaders[key] = value
+	newHeader := []byte(key + ": " + value + "\r\n")
+	// insertPosition := bytes.Index(data, one_line) + 2
+	// fmt.Println("insertPosition: ", insertPosition)
+	// data = append(data[:insertPosition], append(newHeader, data[insertPosition:]...)...)
+
+	data = append(data[:start], append(newHeader, data[start:]...)...)
+	newHeader = nil
+
+	REQ.raw.Reset()
+	REQ.raw.Write(data)
+
+	lowerData = nil
+	data = nil
 }
 
 func (REQ *ConnectionInformation) Del(key string) {
-	REQ.raw.Reset()
+	data := REQ.raw.B
+	lowerSearch := []byte(strings.ToLower(key + ": "))
+	lowerData := bytes.ToLower(data)
 
-	if REQ.thebytesheaders == nil {
-		return
+	start := bytes.Index(lowerData, lowerSearch)
+	lowerSearch = nil
+
+	if start != -1 {
+		end := bytes.Index(lowerData[start:], one_line)
+		lowerData = nil
+
+		end += start + 2
+		data = append(data[:start], data[end:]...)
+
+		REQ.raw.Reset()
+		REQ.raw.Write(data)
 	}
 
-	delete(REQ.thebytesheaders, key)
+	data = nil
 }
 
 func (REQ *ConnectionInformation) Remove(key string) {
+	data := REQ.raw.B
+	lowerSearch := []byte(strings.ToLower(key + ": "))
 
-	REQ.raw.Reset()
+	lowerData := bytes.ToLower(data)
+	start := bytes.Index(lowerData, lowerSearch)
+	lowerSearch = nil
 
-	if REQ.thebytesheaders == nil {
-		return
+	if start != -1 {
+		end := bytes.Index(lowerData[start:], one_line)
+		lowerData = nil
+
+		end += start + 2
+		data = append(data[:start], data[end:]...)
+
+		REQ.raw.Reset()
+		REQ.raw.Write(data)
 	}
 
-	delete(REQ.thebytesheaders, key)
+	data = nil
 }
 
 func (REQ *RequestType) SetBody(RawBody []byte) {
+	lines := bytes.Split(REQ.Header.raw.B, tow_lines)
+
+	lines[1] = RawBody
+	LenBody := len(RawBody)
+	RawBody = nil
+
+	new_requests := bytes.Join(lines, tow_lines)
+
+	lowerSearch := []byte(strings.ToLower("Content-Length" + ": "))
+	lowerData := bytes.ToLower(new_requests)
+
+	start := bytes.Index(lowerData, lowerSearch)
+	lowerSearch = nil
+	if start != -1 {
+		end := bytes.Index(lowerData[start:], one_line)
+		end += start + 2
+		new_requests = append(new_requests[:start], new_requests[end:]...)
+	} else {
+		start = bytes.Index(lowerData, one_line) + 2
+	}
+
+	newHeader := []byte("Content-Length" + ": " + strconv.Itoa(LenBody) + "\r\n")
+
+	new_requests = append(new_requests[:start], append(newHeader, new_requests[start:]...)...)
+	newHeader = nil
+
 	REQ.Header.raw.Reset()
-	REQ.userjson = false
-	REQ.theybytesbody = RawBody
+	REQ.Header.raw.Write(new_requests)
+
+	lowerData = nil
+	new_requests = nil
+
 }
 
 func (REQ *RequestType) SetBodyString(RawBody string) {
+	lines := bytes.Split(REQ.Header.raw.B, tow_lines)
+
+	lines[1] = []byte(RawBody)
+	LenBody := len(RawBody)
+
+	new_requests := bytes.Join(lines, tow_lines)
+
+	lowerSearch := []byte(strings.ToLower("Content-Length" + ": "))
+	lowerData := bytes.ToLower(new_requests)
+
+	start := bytes.Index(lowerData, lowerSearch)
+	lowerSearch = nil
+	if start != -1 {
+		end := bytes.Index(lowerData[start:], one_line)
+		end += start + 2
+		new_requests = append(new_requests[:start], new_requests[end:]...)
+	} else {
+		start = bytes.Index(lowerData, one_line) + 2
+	}
+
+	newHeader := []byte("Content-Length" + ": " + strconv.Itoa(LenBody) + "\r\n")
+
+	new_requests = append(new_requests[:start], append(newHeader, new_requests[start:]...)...)
+	newHeader = nil
+
 	REQ.Header.raw.Reset()
-	REQ.userjson = false
-	REQ.theybytesbody = []byte(RawBody)
+	REQ.Header.raw.Write(new_requests)
+
+	lowerData = nil
+	new_requests = nil
 }
 
 func (REQ *RequestType) SetJson(RawJson map[string]string) error {
-	NewErr := &RegnError{}
-	var err error
-
-	REQ.Header.raw.Reset()
-
-	REQ.userjson = true
-	REQ.theybytesbody, err = json.Marshal(RawJson)
+	TheBody, err := json.Marshal(RawJson)
 
 	if err != nil {
-		NewErr.Message = "Field encoding map to json format; use map[string]string"
-		return NewErr
+		return &RegnError{Message: "Field encoding map to json format; use map[string]string"}
 	}
 
-	return nil
-}
-
-func (REQ *RequestType) release() error {
-	err := &RegnError{}
-
-	if len(REQ.theybytesmethod) == 0 {
-		err.Message = "No URL supplied"
-		return err
-	}
-
-	REQ.Header.raw.Reset()
-	REQ.Header.raw.WriteString(REQ.theybytesmethod)
-	// REQ.Header.raw.WriteString("\r")
-	REQ.Header.raw.WriteString(" " + REQ.theybytesapi)
-	REQ.Header.raw.WriteString(" HTTP/1.1\r\n")
-
-	for key, value := range REQ.Header.thebytesheaders {
-		REQ.Header.raw.WriteString(key + ": " + value + "\r\n")
-	}
-
-	lower := strings.ToLower(REQ.Header.raw.String())
-
-	if !strings.Contains(lower, "user-agent: ") {
-		REQ.Header.raw.WriteString("User-Agent: " + Name + "/" + Version + Author + "\r\n")
-	}
-
-	if !strings.Contains(lower, "host: ") {
-		REQ.Header.raw.WriteString("Host: " + REQ.Header.myhost + "\r\n")
-	}
-
-	if !strings.Contains(lower, "connection: ") {
-		REQ.Header.raw.WriteString("Connection: Keep-Alive\r\n")
-	}
-
-	if !strings.Contains(lower, "content-length: ") {
-		REQ.Header.raw.WriteString("Content-Length: " + strconv.Itoa(len(REQ.theybytesbody)) + "\r\n")
-	}
-
-	REQ.Header.raw.WriteString("\r\n")
-
-	REQ.Header.raw.Write(REQ.theybytesbody)
+	REQ.SetBody(TheBody)
+	REQ.Header.Set("Content-Type", "application/json")
 
 	return nil
 }

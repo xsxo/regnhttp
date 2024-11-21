@@ -74,10 +74,10 @@ func ___connect_to_host___(cn *Client, host_port string, authorization string) e
 
 	therequest := Request()
 	therequest.SetMethod(MethodConnect)
-	therequest.theybytesapi = host_port
+	// therequest.theybytesapi = host_port
+	therequest.SetMethod("http://" + host_port + "/")
 	therequest.Header.Set("Host", host_port)
 	therequest.Header.Set("Authorization", authorization)
-	therequest.release()
 
 	cn.confgiuration.flusher.Write(therequest.Header.raw.B)
 	if err := cn.confgiuration.flusher.Flush(); err != nil {
@@ -256,13 +256,6 @@ func (cn *Client) Send(REQ *RequestType, RES *ResponseType) error {
 	}
 
 	cn.confgiuration.run = true
-
-	if REQ.Header.raw.Len() == 0 {
-		if NewErr := REQ.release(); NewErr != nil {
-			cn.confgiuration.run = false
-			return NewErr
-		}
-	}
 
 	if cn.Deadline != 0 {
 		cn.confgiuration.connection.SetDeadline(time.Now().Add(time.Duration(cn.Deadline) * time.Second))

@@ -21,6 +21,8 @@ var (
 	code_regexp *regexp.Regexp = regexp.MustCompile(`HTTP/1.1 (\d{3})`)
 	tow_lines   []byte         = []byte{13, 10, 13, 10}
 	zero_lines  []byte         = []byte{48, 13, 10, 13, 10}
+	one_line    []byte         = []byte{13, 10}
+	space_line  []byte         = []byte{32}
 
 	MethodPost    string = "POST"
 	MethodGET     string = "GET"
