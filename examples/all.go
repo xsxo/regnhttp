@@ -16,8 +16,9 @@ func Example() {
 	clt.Timeout = 20 // not required
 
 	// to set proxy connection
-	// clt.Porxy("http://username:password@host:port")
-	// clt.Porxy("http://host:port")
+	// clt.Proxy("http://username:password@host:port")
+	// clt.Proxy("http://host:port")
+	// ex: clt.Proxy("http://username:password@localhost:9911")
 
 	// create request object
 	req := regn.Request()

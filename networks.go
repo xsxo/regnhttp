@@ -75,13 +75,15 @@ func ___connect_to_host___(cn *Client, host_port string, authorization string) e
 	therequest := Request()
 	therequest.SetMethod(MethodConnect)
 	// therequest.theybytesapi = host_port
-	therequest.SetMethod("http://" + host_port + "/")
+	therequest.SetURL("http://" + host_port + "/")
 	therequest.Header.Set("Host", host_port)
-	therequest.Header.Set("Authorization", authorization)
+
+	if authorization != "" {
+		therequest.Header.Set("Authorization", authorization)
+	}
 
 	cn.confgiuration.flusher.Write(therequest.Header.raw.B)
 	if err := cn.confgiuration.flusher.Flush(); err != nil {
-		// cn.confgiuration.connection.Close()
 		cn.confgiuration.connection.Close()
 		cn.close_line()
 		return &RegnError{Message: "Field connection with '" + host_port + "' addr"}
@@ -89,23 +91,29 @@ func ___connect_to_host___(cn *Client, host_port string, authorization string) e
 	therequest.Close()
 
 	cn.confgiuration.peeker.Peek(1)
-
-	res, err := cn.confgiuration.peeker.Peek(cn.confgiuration.peeker.Buffered())
+	buffred := cn.confgiuration.peeker.Buffered()
+	res, err := cn.confgiuration.peeker.Peek(buffred)
+	cn.confgiuration.peeker.Discard(len(res))
 
 	if err != nil {
 		cn.confgiuration.connection.Close()
 		cn.close_line()
 		cn.confgiuration.connection = nil
-		return &RegnError{Message: "Field connection with '" + host_port + "' addr"}
+
+		res = nil
+		return &RegnError{Message: "Field proxy connection with '" + host_port + "' addr"}
 	}
 
 	if len(code_regexp.FindSubmatch(res)) == 0 {
 		cn.confgiuration.connection.Close()
 		cn.close_line()
 		cn.confgiuration.connection = nil
-		return &RegnError{Message: "Field connection with '" + host_port + "' addr"}
+
+		res = nil
+		return &RegnError{Message: "Field proxy connection with '" + host_port + "' addr"}
 	}
 
+	res = nil
 	return nil
 }
 
