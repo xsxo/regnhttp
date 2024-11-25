@@ -68,19 +68,16 @@ func ___connect_net___(host string, port string, thetimeout int) (net.Conn, erro
 }
 
 func ___connect_to_host___(cn *Client, host_port string, authorization string) error {
-	// therequest := []byte("CONNECT " + host_port + " HTTP/1.1\r\n" + authorization + "Host: " + host_port + "\r\n\r\n")
-
 	cn.create_line()
 
 	therequest := Request()
-	therequest.SetMethod(MethodConnect)
-	// therequest.theybytesapi = host_port
-	therequest.SetURL("http://" + host_port + "/")
-	therequest.Header.Set("Host", host_port)
+	therequest.Header.raw.Reset()
+	therequest.Header.raw.WriteString("CONNECT " + host_port + " HTTP/1.1\r\nHost: " + host_port + "\r\nConnection: keep-Alive")
 
 	if authorization != "" {
-		therequest.Header.Set("Authorization", authorization)
+		therequest.Header.raw.WriteString("Authorization: " + authorization)
 	}
+	therequest.Header.raw.WriteString("\r\n\r\n")
 
 	cn.confgiuration.flusher.Write(therequest.Header.raw.B)
 	if err := cn.confgiuration.flusher.Flush(); err != nil {
