@@ -55,9 +55,9 @@ func (REQ *RequestType) SetURL(Url string) {
 	Parse, err := url.Parse(Url)
 
 	if err != nil {
-		panic("RegnHTTP Error: Invalid URL  '" + err.Error() + "'")
+		panic("REGNHTTP: Invalid URL  '" + err.Error() + "'")
 	} else if Parse.Scheme == "" {
-		panic("RegnHTTP Error: Invalid URL '" + Url + "': No scheme supplied, Perhaps you meant 'https://" + Url + "' ?")
+		panic("REGNHTTP: Invalid URL '" + Url + "': No scheme supplied, Perhaps you meant 'https://" + Url + "' ?")
 	}
 
 	if Parse.Port() != "" {
@@ -69,7 +69,7 @@ func (REQ *RequestType) SetURL(Url string) {
 	}
 
 	if Parse.Hostname() == "" {
-		panic("RegnHTTP Error: Invalid URL '" + Url + "': No host supplied")
+		panic("REGNHTTP: Invalid URL '" + Url + "': No host supplied")
 	} else {
 		REQ.Header.myhost = Parse.Hostname()
 	}

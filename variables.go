@@ -14,27 +14,29 @@ type RegnError struct {
 }
 
 var (
-	bytes_pool  bytebufferpool.Pool
-	nwpool      *sync.Pool     = &sync.Pool{}
-	nrpool      *sync.Pool     = &sync.Pool{}
-	contetre    *regexp.Regexp = regexp.MustCompile(`Content-Length: (\d+)`)
-	code_regexp *regexp.Regexp = regexp.MustCompile(`HTTP/1.1 (\d{3})`)
-	tow_lines   []byte         = []byte{13, 10, 13, 10}
-	zero_lines  []byte         = []byte{48, 13, 10, 13, 10}
-	one_line    []byte         = []byte{13, 10}
-	space_line  []byte         = []byte{32}
+	bytes_pool bytebufferpool.Pool
+	nwpool     *sync.Pool = &sync.Pool{}
+	nrpool     *sync.Pool = &sync.Pool{}
 
+	status_code_regexp *regexp.Regexp = regexp.MustCompile(`HTTP/1.1 (\d{3})`)
+	reason_regexp      *regexp.Regexp = regexp.MustCompile(`HTTP/1.1 (\d{3} .*)`)
+
+	contetre *regexp.Regexp = regexp.MustCompile(`Content-Length: (\d+)`)
+
+	// delete all this var's and keep zero_lines -> the_lines
+	tow_lines  []byte = []byte{13, 10, 13, 10}
+	zero_lines []byte = []byte{48, 13, 10, 13, 10}
+	one_line   []byte = []byte{13, 10}
+	space_line []byte = []byte{32}
+)
+
+const (
 	MethodPost    string = "POST"
 	MethodGET     string = "GET"
 	MethodPUT     string = "PUT"
 	MethodConnect string = "CONNECT"
 	MethodOptions string = "OPTIONS"
 	MethodTrace   string = "TRACE"
-)
-
-var (
-	status_code_regexp *regexp.Regexp = regexp.MustCompile(`HTTP/1.1 (\d{3})`)
-	reason_regexp      *regexp.Regexp = regexp.MustCompile(`HTTP/1.1 (\d{3} .*)`)
 )
 
 func get_reader(Conn net.Conn) *bufio.Reader {

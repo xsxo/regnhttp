@@ -8,8 +8,8 @@ func TestConnectFunction(T *testing.T) {
 	req.SetURL("http://localhost:9911")
 
 	clt := Client{
-		Timeout:  10,
-		Deadline: 10,
+		Timeout:     10,
+		TimeoutRead: 10,
 	}
 
 	if err := clt.Connect(req); err != nil {

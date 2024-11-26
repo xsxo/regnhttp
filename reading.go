@@ -11,7 +11,6 @@ import (
 
 type headers_struct struct {
 	thebuffer bytebufferpool.ByteBuffer
-	// *thebuffer bytebufferpool.ByteBuffer
 }
 
 type ResponseType struct {
@@ -29,6 +28,9 @@ func (RES *ResponseType) Close() {
 
 func (RES *ResponseType) StatusCode() int {
 	matches := status_code_regexp.FindSubmatch(RES.Header.thebuffer.B)
+	if len(matches) < 1 {
+		return 0
+	}
 	status_code, _ := strconv.Atoi(string(matches[1]))
 
 	matches[0] = nil
@@ -38,6 +40,11 @@ func (RES *ResponseType) StatusCode() int {
 
 func (RES *ResponseType) Reason() string {
 	matches := reason_regexp.FindSubmatch(RES.Header.thebuffer.B)
+
+	if len(matches) < 1 {
+		return ""
+	}
+
 	to_return := string(matches[1])
 
 	matches[0] = nil

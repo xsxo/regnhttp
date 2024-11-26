@@ -22,8 +22,8 @@ func TestReadingResponse(T *testing.T) {
 	}
 
 	clt := Client{
-		Timeout:  10,
-		Deadline: 10,
+		Timeout:     10,
+		TimeoutRead: 10,
 	}
 
 	if err := clt.Connect(req); err != nil {

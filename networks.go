@@ -23,105 +23,95 @@ type __inforamtion__ struct {
 	authorization string
 	host_proxy    string
 	port_proxy    string
+	usedhttp2     bool
 }
 
 type Client struct {
 	confgiuration *__inforamtion__
 	Timeout       int
-	Deadline      int
+	TimeoutRead   int
+	TlsConfig     *tls.Config
 }
 
 func (e *RegnError) Error() string {
-	return "RegnHTTP Error: " + e.Message
+	return "REGNHTTP Error: " + e.Message
 }
 
-func ___connect_net___(host string, port string, thetimeout int) (net.Conn, error) {
-	if thetimeout == 0 {
-		thetimeout = 10
+func (cn *Client) Http2Upgrade() {
+	cn.confgiuration.usedhttp2 = true
+	cn.Close()
+}
+
+func (cn *Client) connectNet(host string, port string) error {
+	if cn.Timeout == 0 {
+		cn.Timeout = 10
 	}
+
+	var err error
 
 	if port != "443" {
-		TheConn, err := net.DialTimeout("tcp", host+":"+port, time.Duration(thetimeout)*time.Second)
-
-		if err != nil {
-			er := &RegnError{}
-			er.Message = "Field connection with '" + host + "' host\nnethttp Error: " + err.Error()
-			return nil, er
-		}
-
-		// TheConn = net.Conn(TheConn)
-		return TheConn, nil
-
+		cn.confgiuration.connection, err = net.DialTimeout("tcp", host+":"+port, time.Duration(cn.Timeout)*time.Second)
 	} else {
-		TheConn, err := tls.Dial("tcp4", host+":"+port, &tls.Config{ServerName: host})
-
-		if err != nil {
-			er := &RegnError{}
-			er.Message = "Field connection with '" + host + "' host"
-			return nil, er
-		}
-
-		// TheConn := net.Conn(TlsConn)
-		// return &TheConn
-		return TheConn, nil
+		cn.confgiuration.connection, err = tls.Dial("tcp4", host+":"+port, cn.TlsConfig)
 	}
-}
-
-func ___connect_to_host___(cn *Client, host_port string, authorization string) error {
-	cn.create_line()
-
-	therequest := Request()
-	therequest.Header.raw.Reset()
-	therequest.Header.raw.WriteString("CONNECT " + host_port + " HTTP/1.1\r\nHost: " + host_port + "\r\nConnection: keep-Alive")
-
-	if authorization != "" {
-		therequest.Header.raw.WriteString("Authorization: " + authorization)
-	}
-	therequest.Header.raw.WriteString("\r\n\r\n")
-
-	cn.confgiuration.flusher.Write(therequest.Header.raw.B)
-	if err := cn.confgiuration.flusher.Flush(); err != nil {
-		cn.confgiuration.connection.Close()
-		cn.close_line()
-		return &RegnError{Message: "Field connection with '" + host_port + "' addr"}
-	}
-	therequest.Close()
-
-	cn.confgiuration.peeker.Peek(1)
-	buffred := cn.confgiuration.peeker.Buffered()
-	res, err := cn.confgiuration.peeker.Peek(buffred)
-	cn.confgiuration.peeker.Discard(len(res))
 
 	if err != nil {
-		cn.confgiuration.connection.Close()
-		cn.close_line()
-		cn.confgiuration.connection = nil
+		return &RegnError{Message: "Field connection with '" + host + "' host"}
+	}
 
-		res = nil
+	// if cn.TimeoutRead == 0 {
+	// 	cn.confgiuration.connection.SetDeadline(time.Now().Add(time.Duration(cn.Timeout) * time.Second))
+	// }
+
+	cn.create_line()
+	err = nil
+	return nil
+}
+
+func (cn *Client) connectHost(host_port string) error {
+	therequest := bytes_pool.Get()
+	therequest.Reset()
+	therequest.WriteString("CONNECT " + host_port + " HTTP/1.1\r\nHost: " + host_port + "\r\nConnection: keep-Alive")
+
+	if cn.confgiuration.authorization != "" {
+		therequest.WriteString("Authorization: " + cn.confgiuration.authorization)
+	}
+	therequest.WriteString("\r\n\r\n")
+
+	if _, err := cn.confgiuration.connection.Write(therequest.B); err != nil {
+		cn.Close()
+		return &RegnError{Message: "Field connection with '" + host_port + "' addr"}
+	}
+
+	if err := cn.confgiuration.flusher.Flush(); err != nil {
+		cn.Close()
+		return &RegnError{Message: "Field connection with '" + host_port + "' addr"}
+	}
+	therequest.Reset()
+	bytes_pool.Put(therequest)
+
+	buffer := make([]byte, 4096)
+	if _, err := cn.confgiuration.peeker.Read(buffer); err != nil {
 		return &RegnError{Message: "Field proxy connection with '" + host_port + "' addr"}
 	}
 
-	if len(code_regexp.FindSubmatch(res)) == 0 {
-		cn.confgiuration.connection.Close()
-		cn.close_line()
-		cn.confgiuration.connection = nil
+	readed := status_code_regexp.FindSubmatch(buffer)
+	buffer = nil
 
-		res = nil
+	if len(readed) == 0 {
+		cn.Close()
 		return &RegnError{Message: "Field proxy connection with '" + host_port + "' addr"}
 	}
 
-	res = nil
+	readed[0] = nil
 	return nil
 }
 
 func (cn *Client) Proxy(Url string) {
 	if cn.confgiuration == nil {
 		cn.confgiuration = &__inforamtion__{}
-	}
-	if cn.confgiuration.connection != nil {
-		cn.confgiuration.connection.Close()
-		cn.close_line()
-		cn.confgiuration.connection = nil
+	} else if cn.confgiuration.connection != nil {
+		cn.Close()
 	}
 
 	cn.confgiuration.host_connected = ""
@@ -129,20 +119,22 @@ func (cn *Client) Proxy(Url string) {
 
 	Parse, err := url.Parse(Url)
 	if err != nil {
-		return
+		cn.Close()
+		panic("REGNHTTP: Invalid proxy format.")
 	}
 
 	if Parse.Host == "" {
-		panic("REGN HTTP error: No host proxy url supplied.")
+		cn.Close()
+		panic("REGNHTTP: No host proxy url supplied.")
 	} else if Parse.Port() == "" {
-		panic("REGN HTTP error: No host proxy url supplied.")
+		cn.Close()
+		panic("REGNHTTP: No port proxy url supplied.")
 	}
 
 	cn.confgiuration.host_proxy = Parse.Hostname()
 	cn.confgiuration.port_proxy = Parse.Port()
 
 	if Parse.User.Username() != "" {
-
 		password, _ := Parse.User.Password()
 		credentials := Parse.User.Username() + ":" + password
 		cn.confgiuration.authorization = ""
@@ -153,24 +145,25 @@ func (cn *Client) Proxy(Url string) {
 func (cn *Client) Close() {
 	if cn.confgiuration == nil {
 		cn.confgiuration = &__inforamtion__{}
-	}
-
-	if cn.confgiuration.connection != nil {
+	} else if cn.confgiuration.connection != nil {
 		cn.confgiuration.connection.Close()
-		cn.close_line()
-		cn.confgiuration.connection = nil
 	}
 
+	cn.close_line()
+	cn.confgiuration.connection = nil
 	cn.confgiuration.host_connected = ""
+	cn.confgiuration.run = false
 }
 
 func (cn *Client) close_line() {
 	if cn.confgiuration.peeker != nil {
 		nrpool.Put(cn.confgiuration.peeker)
+		cn.confgiuration.peeker = nil
 	}
 
 	if cn.confgiuration.flusher != nil {
 		nwpool.Put(cn.confgiuration.flusher)
+		cn.confgiuration.flusher = nil
 	}
 }
 
@@ -183,98 +176,67 @@ func (cn *Client) create_line() {
 func (cn *Client) Connect(REQ *RequestType) error {
 	if cn.confgiuration == nil {
 		cn.confgiuration = &__inforamtion__{}
+	} else if cn.confgiuration.host_connected != REQ.Header.myhost {
+		cn.Close()
+	}
+
+	if cn.TlsConfig == nil {
+		cn.TlsConfig = &tls.Config{}
+		cn.TlsConfig.InsecureSkipVerify = false
 	}
 
 	if cn.confgiuration.run {
-		cn.confgiuration.run = false
-		panic("REGN HTTP Error: The client struct isn't support pool connections\ncreate a client for each connection || use sync.Pool for pool connections")
+		panic("REGNHTTP: The client struct isn't support pool connections\ncreate a client for each connection || use sync.Pool for pool connections")
 	}
 
 	if cn.confgiuration.use_proxy {
 		if cn.confgiuration.connection == nil {
-			var err error
-			cn.confgiuration.connection, err = ___connect_net___(cn.confgiuration.host_proxy, cn.confgiuration.port_proxy, cn.Timeout)
-			if err != nil {
+			cn.TlsConfig.ServerName = REQ.Header.myhost
+			if err := cn.connectNet(cn.confgiuration.host_proxy, cn.confgiuration.port_proxy); err != nil {
 				return err
 			}
 
-			if err := ___connect_to_host___(cn, REQ.Header.myhost+":"+REQ.Header.myport, cn.confgiuration.authorization); err != nil {
+			if err := cn.connectHost(REQ.Header.myhost + ":" + REQ.Header.myport); err != nil {
 				return err
 			}
 
-			cn.confgiuration.host_connected = REQ.Header.myhost
-
-		} else if cn.confgiuration.host_connected != REQ.Header.myhost {
-			if err := ___connect_to_host___(cn, REQ.Header.myhost+":"+REQ.Header.myport, cn.confgiuration.authorization); err != nil {
-				return err
+			if REQ.Header.myport == "443" {
+				cn.confgiuration.connection = tls.Client(cn.confgiuration.connection, cn.TlsConfig)
+				cn.create_line()
 			}
 
 			cn.confgiuration.host_connected = REQ.Header.myhost
-
 		}
 
-		if REQ.Header.myport == "443" {
-			config := &tls.Config{
-				ServerName: REQ.Header.myhost,
-			}
-			tlsConn := tls.Client(cn.confgiuration.connection, config)
-			// tcc := net.Conn(tlsConn)
-			cn.confgiuration.connection = tlsConn
+	} else if cn.confgiuration.connection == nil {
+		cn.TlsConfig.ServerName = REQ.Header.myhost
+		if err := cn.connectNet(REQ.Header.myhost, REQ.Header.myport); err != nil {
+			return err
 		}
-
-	} else {
-		if cn.confgiuration.connection == nil {
-			var err error
-			cn.confgiuration.connection, err = ___connect_net___(REQ.Header.myhost, REQ.Header.myport, cn.Timeout)
-
-			if err != nil {
-				return err
-			}
-			cn.confgiuration.host_connected = REQ.Header.myhost
-			cn.create_line()
-
-		} else if cn.confgiuration.host_connected != REQ.Header.myhost {
-			var err error
-			if cn.confgiuration.connection != nil {
-				cn.close_line()
-				cn.confgiuration.connection.Close()
-				cn.confgiuration.connection = nil
-			}
-
-			cn.confgiuration.connection, err = ___connect_net___(REQ.Header.myhost, REQ.Header.myport, cn.Timeout)
-			if err != nil {
-				return err
-			}
-
-			cn.confgiuration.host_connected = REQ.Header.myhost
-			cn.create_line()
-		}
+		cn.confgiuration.host_connected = REQ.Header.myhost
 	}
 
 	return nil
+
 }
 
-func (cn *Client) Send(REQ *RequestType, RES *ResponseType) error {
-	if NewErr := cn.Connect(REQ); NewErr != nil {
-		cn.confgiuration.run = false
-		return NewErr
+func (cn *Client) sendOld(REQ *RequestType, RES *ResponseType) error {
+	if err := cn.Connect(REQ); err != nil {
+		cn.Close()
+		return err
 	}
 
 	cn.confgiuration.run = true
 
-	if cn.Deadline != 0 {
-		cn.confgiuration.connection.SetDeadline(time.Now().Add(time.Duration(cn.Deadline) * time.Second))
-		cn.Deadline = 0
+	if cn.TimeoutRead != 0 {
+		cn.confgiuration.connection.SetDeadline(time.Now().Add(time.Duration(cn.TimeoutRead) * time.Second))
+		cn.TimeoutRead = 0
 	}
 
 	cn.confgiuration.flusher.Write(REQ.Header.raw.B)
-	if NewErr := cn.confgiuration.flusher.Flush(); NewErr != nil {
-		cn.confgiuration.connection.Close()
-		cn.close_line()
-		cn.confgiuration.connection = nil
-		cn.confgiuration.host_connected = ""
-		cn.confgiuration.run = false
-		return &RegnError{Message: " Error writing: " + NewErr.Error()}
+	if err := cn.confgiuration.flusher.Flush(); err != nil {
+		cn.Close()
+		return &RegnError{Message: " Error Writing \n" + err.Error()}
 	}
 
 	RES.Header.thebuffer.Reset()
@@ -282,13 +244,8 @@ func (cn *Client) Send(REQ *RequestType, RES *ResponseType) error {
 		cn.confgiuration.peeker.Peek(1)
 		le := cn.confgiuration.peeker.Buffered()
 		if le == 0 {
-			cn.confgiuration.connection.Close()
-			cn.close_line()
-			cn.confgiuration.connection = nil
-			cn.confgiuration.host_connected = ""
-
-			cn.confgiuration.run = false
-			return nil
+			cn.Close()
+			return &RegnError{Message: " Timeout Reading"}
 		}
 
 		peeked, _ := cn.confgiuration.peeker.Peek(le)
@@ -309,7 +266,6 @@ func (cn *Client) Send(REQ *RequestType, RES *ResponseType) error {
 			} else if bytes.Contains(RES.Header.thebuffer.B, zero_lines) {
 				break
 			}
-
 		}
 	}
 
@@ -319,9 +275,5 @@ func (cn *Client) Send(REQ *RequestType, RES *ResponseType) error {
 }
 
 func (cn *Client) Do(REQ *RequestType, RES *ResponseType) error {
-	return cn.Send(REQ, RES)
-}
-
-func (cn *Client) Action(REQ *RequestType, RES *ResponseType) error {
-	return cn.Send(REQ, RES)
+	return cn.sendOld(REQ, RES)
 }

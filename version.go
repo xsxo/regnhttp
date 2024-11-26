@@ -1,15 +1,9 @@
 package regn
 
-var Version string
-var Name string
-var Author string
-var License string
-var Description string
-
-func init() {
-	Version = "v0.0.6-alpha"
-	Name = "REGN HTTP"
-	Author = "@xsxo GitHub"
-	License = "Apache-2.0"
-	Description = "High Performance HTTP Requests GoLang Packge"
-}
+const (
+	Version     string = "v0.0.7-alpha"
+	Name        string = "REGN HTTP"
+	Author      string = "@xsxo GitHub"
+	License     string = "Apache-2.0"
+	Description string = "High Performance HTTP Requests GoLang Packge"
+)

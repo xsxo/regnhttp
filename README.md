@@ -16,8 +16,12 @@ RegnHTTP it may lack many features, but this is intentional, REGN HTTP excludes 
 - Bulit sync.Pool to Avoid Duplicating vars
 - Support HTTP/2, HTTP/3 (Soon...)
 - Mulit Requests on One Connection (soon...)
+- Send Headers One Time, The next requsts has body without headers (soon...)
 - No Thread Race | No Lose Data
 - Built-in Socket Proxy Connection
+- Used Proxy Directly without tansport
+- Used HTTP/2, HTTP/3 Directly without tansport (soon...)
+- Support tansport (soon...)
 
 ## How To Use RegnHTTP
 - insatll the package: `go install github.com/xsxo/regnhttp@latest`
