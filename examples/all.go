@@ -80,7 +80,7 @@ func Example() {
 
 }
 
-func main() {
+func HttpBinExample() {
 
 	// create client each function
 	// !! regn Client is'nt support pool connection
