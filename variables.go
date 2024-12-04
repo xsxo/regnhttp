@@ -32,8 +32,8 @@ var (
 
 const (
 	MethodPost    string = "POST"
-	MethodGET     string = "GET"
-	MethodPUT     string = "PUT"
+	MethodGet     string = "GET"
+	MethodPut     string = "PUT"
 	MethodConnect string = "CONNECT"
 	MethodOptions string = "OPTIONS"
 	MethodTrace   string = "TRACE"

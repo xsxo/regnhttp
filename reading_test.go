@@ -5,6 +5,21 @@ import (
 	"testing"
 )
 
+func TestEmptyResponse(T *testing.T) {
+	res := Response()
+	if res.Header.Get("User-Agent") != "" {
+		T.Error("Error: header parsing -> REQ.Header.Get")
+	} else if res.Body() != nil {
+		T.Error("Error: RES.Body function")
+	} else if res.StatusCode() != 0 {
+		T.Error("Error: RES.StatusCode function")
+	} else if res.Reason() != "" {
+		T.Error("Error : " + strconv.Itoa(res.StatusCode()))
+	} else if len(res.Header.GetAll()) != 0 {
+		T.Error("Error: header parsing -> REQ.Header.GetAll")
+	}
+}
+
 func TestReadingResponse(T *testing.T) {
 	req := Request()
 	res := Response()
