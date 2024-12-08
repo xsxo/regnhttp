@@ -46,7 +46,7 @@ func Example() {
 
 	// check error
 	if err != nil {
-		panic("Err: " + err.Error())
+		panic(err.Error())
 	} else {
 		fmt.Println("connected with 'httpbin.org' host")
 	}
@@ -80,7 +80,7 @@ func Example() {
 
 }
 
-func HttpBinExample() {
+func main() {
 
 	// create client each function
 	// !! regn Client is'nt support pool connection

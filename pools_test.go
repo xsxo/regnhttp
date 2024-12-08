@@ -10,7 +10,7 @@ func TestBytesPool(T *testing.T) {
 	buffer := bytes.Buffer{}
 	buffer.WriteString(Name + " - " + Version)
 
-	pool := bytes_pool.Get()
+	pool := bufferPool.Get()
 
 	pool.ReadFrom(&buffer)
 
@@ -33,9 +33,9 @@ func TestBytesPool(T *testing.T) {
 func TestWriterPool(T *testing.T) {
 	buffer := bytes.Buffer{}
 
-	nwpool.Put(bufio.NewWriter(&buffer))
+	flusherPool.Put(bufio.NewWriter(&buffer))
 
-	writer := nwpool.Get().(*bufio.Writer)
+	writer := flusherPool.Get().(*bufio.Writer)
 	writer.Reset(&buffer)
 
 	if Writed, NewErr := writer.WriteString(Name + " - " + Version); NewErr != nil || Writed == 0 {
@@ -51,9 +51,9 @@ func TestWriterPool(T *testing.T) {
 
 func TestReaderPool(T *testing.T) {
 	var buffer *bytes.Buffer = &bytes.Buffer{}
-	nwpool.Put(bufio.NewReader(buffer))
+	peekerPool.Put(bufio.NewReader(buffer))
 
-	Reader := nwpool.Get().(*bufio.Reader)
+	Reader := peekerPool.Get().(*bufio.Reader)
 	Reader.Reset(buffer)
 
 	buffer.WriteString(Name + " - " + Version)

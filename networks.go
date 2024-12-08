@@ -8,60 +8,75 @@ import (
 	"net"
 	"net/url"
 	"strconv"
+	"sync"
 	"time"
 
+	"github.com/valyala/bytebufferpool"
 	"golang.org/x/net/http2"
 )
 
 type Client struct {
-	Timeout     int
-	TimeoutRead int
-	TlsConfig   *tls.Config
+	// Timeout Connection
+	Timeout int
 
-	// confgiuration
-	use_proxy      bool
-	host_connected string
-	connection     net.Conn
-	run            bool
+	// Timeout Reading Response
+	TimeoutRead int
+
+	// Tls Context
+	TlsConfig *tls.Config
+
+	// Dialer to create dial connection
+	Dialer *net.Dialer
+
+	// Max Requests & Responses in same time
+	Http2MaxIds uint32
+
+	useProxy      bool
+	hostConnected string
+	connection    net.Conn
+	run           bool
 
 	peeker  *bufio.Reader
 	flusher *bufio.Writer
 
 	authorization string
-	host_proxy    string
-	port_proxy    string
+	hostProxy     string
+	portProxy     string
 	upgraded      bool
 	theFrame      *http2.Framer
-	// streamId      uint32
+	streamId      uint32
 
-	framChannel chan http2.Frame
+	prmPool  *sync.Pool
+	secPool  *sync.Pool
+	winBlock uint32
 }
 
-func (e *RegnError) Error() string {
-	return "REGNHTTP Error: " + e.Message
+type http2FrameForPool struct {
+	Content  *bytebufferpool.ByteBuffer
+	Length   uint32
+	StreamID uint32
 }
 
 func (c *Client) ReturnFrame() *http2.Framer {
 	return c.theFrame
 }
 
-// func (c *Client) Http2GenId() uint32 {
-// 	if c.streamId == 0 {
-// 		c.streamId++
-// 		return c.streamId
-// 	}
-// 	c.streamId += 2
-
-// 	return c.streamId
-// }
-
-func (c *Client) Status() string {
-	if c.run {
-		return "Runned"
-	} else if c.connection != nil {
-		return "Opned"
+func (c *Client) Http2GenId() uint32 {
+	if c.streamId == 0 {
+		c.streamId++
+		return c.streamId
 	}
-	return "Closed"
+	c.streamId += 2
+
+	return c.streamId
+}
+
+func (c *Client) Status() bool {
+	if c.hostConnected != "" {
+		return true
+	} else {
+		return false
+	}
 }
 
 func (c *Client) HttpVesrion() string {
@@ -72,35 +87,45 @@ func (c *Client) HttpVesrion() string {
 	}
 }
 
-// func (c *Client) HttpDowngrade() {
-// 	c.Close()
-// 	c.upgraded = false
-// }
+func (c *Client) HttpDowngrade() {
+	if c.upgraded {
+		c.Close()
+		c.upgraded = false
+		c.prmPool = nil
+		c.secPool = nil
+	}
+}
 
-// func (c *Client) Http2Upgrade() {
-// 	c.Close()
-// 	c.upgraded = true
-// }
+func (c *Client) Http2Upgrade() {
+	c.Close()
+	c.upgraded = true
+
+	c.prmPool = &sync.Pool{}
+	c.secPool = &sync.Pool{}
+}
 
 func (c *Client) connectNet(host string, port string) error {
 	if c.Timeout == 0 {
 		c.Timeout = 10
 	}
+	if c.TimeoutRead == 0 {
+		c.TimeoutRead = c.Timeout
+	}
+
+	if c.Dialer == nil {
+		c.Dialer = &net.Dialer{Timeout: time.Duration(c.Timeout) * time.Second, Deadline: time.Now().Add(time.Duration(c.Timeout) * time.Second)}
+	}
 
 	var err error
 
 	if port != "443" {
-		c.connection, err = net.DialTimeout("tcp", host+":"+port, time.Duration(c.Timeout)*time.Second)
+		c.connection, err = c.Dialer.Dial("tcp", host+":"+port)
 	} else {
-		c.connection, err = tls.Dial("tcp4", host+":"+port, c.TlsConfig)
+		c.connection, err = tls.DialWithDialer(c.Dialer, "tcp4", host+":"+port, c.TlsConfig)
 	}
 
 	if err != nil {
-		return &RegnError{Message: "Field create connection with '" + host + ":" + port + "' address"}
-	}
-
-	if c.TimeoutRead == 0 {
-		c.connection.SetDeadline(time.Now().Add(time.Duration(c.Timeout) * time.Second))
+		return &RegnError{Message: "field create connection with '" + host + ":" + port + "' address\n" + err.Error()}
 	}
 
 	c.createLines()
@@ -108,10 +133,10 @@ func (c *Client) connectNet(host string, port string) error {
 	return nil
 }
 
-func (c *Client) connectHost(host_port string) error {
-	therequest := bytes_pool.Get()
+func (c *Client) connectHost(address string) error {
+	therequest := bufferPool.Get()
 	therequest.Reset()
-	therequest.WriteString("CONNECT " + host_port + " HTTP/1.1\r\nHost: " + host_port + "\r\nConnection: keep-Alive")
+	therequest.WriteString("CONNECT " + address + " HTTP/1.1\r\nHost: " + address + "\r\nConnection: keep-Alive")
 
 	if c.authorization != "" {
 		therequest.WriteString("Authorization: " + c.authorization)
@@ -120,28 +145,28 @@ func (c *Client) connectHost(host_port string) error {
 
 	if _, err := c.flusher.Write(therequest.B); err != nil {
 		c.Close()
-		return &RegnError{Message: "Field proxy connection with '" + host_port + "' address"}
+		return &RegnError{Message: "field proxy connection with '" + address + "' address"}
 	}
 
 	if err := c.flusher.Flush(); err != nil {
 		c.Close()
-		return &RegnError{Message: "Field proxy connection with '" + host_port + "' address"}
+		return &RegnError{Message: "field proxy connection with '" + address + "' address"}
 	}
 	therequest.Reset()
-	bytes_pool.Put(therequest)
+	bufferPool.Put(therequest)
 
 	buffer := make([]byte, 4096)
 	if _, err := c.peeker.Read(buffer); err != nil {
 		c.Close()
-		return &RegnError{Message: "Field proxy connection with '" + host_port + "' address"}
+		return &RegnError{Message: "field proxy connection with '" + address + "' address"}
 	}
 
-	readed := status_code_regexp.FindSubmatch(buffer)
+	readed := statusRegex.FindSubmatch(buffer)
 	buffer = nil
 
 	if len(readed) == 0 {
 		c.Close()
-		return &RegnError{Message: "Field proxy connection with '" + host_port + "' addr"}
+		return &RegnError{Message: "field proxy connection with '" + address + "' address"}
 	}
 
 	readed[0] = nil
@@ -153,22 +178,22 @@ func (c *Client) Proxy(Url string) {
 		c.Close()
 	}
 
-	c.host_connected = ""
-	c.use_proxy = true
+	c.hostConnected = ""
+	c.useProxy = true
 
 	Parse, err := url.Parse(Url)
 	if err != nil {
-		panic("REGNHTTP: Invalid proxy format.")
+		panic("invalid proxy format")
 	}
 
 	if Parse.Hostname() == "" {
-		panic("REGNHTTP: No host proxy url supplied.")
+		panic("no hostname proxy url supplied")
 	} else if Parse.Port() == "" {
-		panic("REGNHTTP: No port proxy url supplied.")
+		panic("no port proxy url supplied")
 	}
 
-	c.host_proxy = Parse.Hostname()
-	c.port_proxy = Parse.Port()
+	c.hostProxy = Parse.Hostname()
+	c.portProxy = Parse.Port()
 
 	if Parse.User.Username() != "" {
 		password, _ := Parse.User.Password()
@@ -184,12 +209,12 @@ func (c *Client) Close() {
 		if new != nil {
 			new.Close()
 			c.connection = nil
-			c.host_connected = ""
+			c.hostConnected = ""
 		}
 	} else {
 		if c.connection != nil {
 			c.connection.Close()
-			c.host_connected = ""
+			c.hostConnected = ""
 			c.connection = nil
 		}
 	}
@@ -200,34 +225,49 @@ func (c *Client) Close() {
 		c.theFrame = nil
 	}
 
-	if c.framChannel != nil {
-		close(c.framChannel)
-		c.framChannel = nil
+	if c.prmPool != nil {
+		c.emtpyPools()
 	}
 
 	c.run = false
 }
 
+func (c *Client) emtpyPools() {
+	for {
+		frame := c.prmPool.Get()
+		if frame == nil {
+			break
+		}
+	}
+
+	for {
+		frame := c.secPool.Get()
+		if frame == nil {
+			break
+		}
+	}
+}
+
 func (c *Client) closeLines() {
 	if c.peeker != nil {
-		nrpool.Put(c.peeker)
+		peekerPool.Put(c.peeker)
 		c.peeker = nil
 	}
 
 	if c.flusher != nil {
-		nwpool.Put(c.flusher)
+		flusherPool.Put(c.flusher)
 		c.flusher = nil
 	}
 }
 
 func (c *Client) createLines() {
 	c.closeLines()
-	c.peeker = get_reader(c.connection)
-	c.flusher = get_writer(c.connection)
+	c.peeker = genPeeker(c.connection)
+	c.flusher = genFlusher(c.connection)
 }
 
 func (c *Client) Connect(REQ *RequestType) error {
-	if c.host_connected != REQ.Header.myhost && c.host_connected != "" {
+	if c.hostConnected != REQ.Header.myhost && c.hostConnected != "" {
 		c.Close()
 	}
 
@@ -238,18 +278,18 @@ func (c *Client) Connect(REQ *RequestType) error {
 
 	if c.run {
 		c.Close()
-		panic("REGNHTTP: The client struct isn't support pool connections\ncreate a client for each connection || use sync.Pool for pool connections")
+		panic("concurrent client writes")
 	}
 
-	if c.host_connected == "" {
+	if c.hostConnected == "" {
 		c.TlsConfig.ServerName = REQ.Header.myhost
 
 		if c.upgraded {
 			c.TlsConfig.NextProtos = []string{"h2"}
 		}
 
-		if c.use_proxy {
-			if err := c.connectNet(c.host_proxy, c.port_proxy); err != nil {
+		if c.useProxy {
+			if err := c.connectNet(c.hostProxy, c.portProxy); err != nil {
 				c.Close()
 				return err
 			}
@@ -274,7 +314,7 @@ func (c *Client) Connect(REQ *RequestType) error {
 		if c.upgraded {
 			if REQ.Header.myport != "443" {
 				c.Close()
-				panic("REGNHTTP/2: Can not use HTT2 Protocol without tls (https://)")
+				panic("http2 protocol support https requests only; use https://")
 			}
 
 			if _, err := c.flusher.Write([]byte(http2.ClientPreface)); err != nil {
@@ -290,146 +330,222 @@ func (c *Client) Connect(REQ *RequestType) error {
 			c.closeLines()
 			c.theFrame = http2.NewFramer(c.connection, c.connection)
 
+			if c.Http2MaxIds == 0 {
+				c.Http2MaxIds = 12263
+			}
+
 			if err := c.theFrame.WriteSettings([]http2.Setting{
-				{ID: http2.SettingMaxConcurrentStreams, Val: uint32(64)},
+				{ID: http2.SettingMaxConcurrentStreams, Val: uint32(c.Http2MaxIds)},
 				{ID: http2.SettingInitialWindowSize, Val: uint32(65535)},
 				{ID: http2.SettingHeaderTableSize, Val: uint32(4096)},
+				{ID: http2.SettingMaxHeaderListSize, Val: uint32(4096)},
 			}...); err != nil {
 				c.Close()
-				return &RegnError{Message: "Field send HTTP2 settings to the server"}
+				return &RegnError{Message: "field send HTTP2 settings to the server"}
 			}
 
 			if frame, err := c.theFrame.ReadFrame(); err != nil {
-				return &RegnError{Message: "Field read HTTP2 settings from the server"}
+				return &RegnError{Message: "field read HTTP2 settings from the server"}
 			} else if _, ok := frame.(*http2.SettingsFrame); !ok {
-				return &RegnError{Message: "Field foramt HTTP2 settings from the server"}
+				return &RegnError{Message: "field foramt HTTP2 settings from the server"}
 			}
 
-			// go c.readBackground()
 		}
-		c.host_connected = REQ.Header.myhost
+		c.hostConnected = REQ.Header.myhost
 	}
 
 	return nil
 }
 
-// func (c *Client) Http2SendRequest(REQ *RequestType, ID uint32) error {
-// 	if err := c.Connect(REQ); err != nil {
-// 		return err
-// 	}
+func (c *Client) Http2SendRequest(REQ *RequestType, ID uint32) error {
+	if !c.upgraded {
+		c.Http2Upgrade()
+	}
 
-// 	if c.TimeoutRead != 0 {
-// 		c.connection.SetDeadline(time.Now().Add(time.Duration(c.TimeoutRead) * time.Second))
-// 		c.TimeoutRead = 0
-// 	}
+	if err := c.Connect(REQ); err != nil {
+		return err
+	}
 
-// 	if REQ.Header.hpackHeaders == nil {
-// 		REQ.upgradeH2c()
-// 	}
+	c.run = true
+	if c.TimeoutRead != 0 {
+		c.Dialer.Deadline = time.Now().Add(time.Duration(c.TimeoutRead) * time.Second)
+		c.TimeoutRead = 0
+	}
 
-// 	if err := c.theFrame.WriteHeaders(http2.HeadersFrameParam{
-// 		StreamID:      ID,
-// 		BlockFragment: REQ.Header.raw.B,
-// 		EndHeaders:    true,
-// 		EndStream:     false,
-// 	}); err != nil {
-// 		c.Close()
-// 		return &RegnError{Message: "error writing http2 request\n" + err.Error()}
-// 	}
+	if REQ.Header.hpackHeaders == nil {
+		REQ.Http2Upgrade()
+	}
 
-// 	if err := c.theFrame.WriteData(ID, true, REQ.Header.rawBody.B); err != nil {
-// 		c.Close()
-// 		return &RegnError{Message: "error writing http2 request\n" + err.Error()}
-// 	}
+	if err := c.theFrame.WriteHeaders(http2.HeadersFrameParam{
+		StreamID:      ID,
+		BlockFragment: REQ.Header.raw.B,
+		EndHeaders:    true,
+		EndStream:     false,
+	}); err != nil {
+		c.Close()
+		return &RegnError{Message: "field send http2 request\n" + err.Error()}
+	}
 
-// 	return nil
-// }
+	if err := c.theFrame.WriteData(ID, true, REQ.Header.rawBody.B); err != nil {
+		c.Close()
+		return &RegnError{Message: "field send http2 request\n" + err.Error()}
+	}
 
-// func (c *Client) readBackground() {
-// 	c.framChannel = make(chan http2.Frame)
-// 	for c.theFrame != nil {
-// 		if frame, err := c.theFrame.ReadFrame(); err != nil {
-// 			c.framChannel <- frame
-// 			frame = nil
-// 		}
-// 	}
-// }
+	if c.winBlock >= 60000 {
+		if err := c.theFrame.WriteWindowUpdate(c.streamId, c.winBlock); err != nil {
+			return &RegnError{Message: "field send HTTP2 settings to the server"}
+		}
+	}
 
-// func (c *Client) Http2ReadRespone(RES *ResponseType, ID uint32) error {
-// 	if !c.upgraded {
-// 		c.Http2Upgrade()
+	c.run = false
+	return nil
+}
 
-// 		return &RegnError{Message: "there's no connection to read response; use Client.Connect(request) function to create connection"}
-// 	} else if RES.Header.decoder == nil {
-// 		RES.upgradeH2c()
-// 	}
+func (c *Client) Http2ReadRespone(RES *ResponseType, ID uint32) error {
+	if c.run {
+		panic("concurrent client reader")
+	} else if !c.upgraded {
+		RES.Header.contectLegnth = -1
+		RES.Header.thebuffer.Reset()
+		c.Http2Upgrade()
+		return nil
+	} else if RES.Header.decoder == nil {
+		RES.Http2Upgrade()
+	}
 
-// 	RES.Header.headers = []hpack.HeaderField{}
-// 	RES.Header.thebuffer.Reset()
+	c.run = true
+	RES.Header.contectLegnth = -1
+	RES.Header.thebuffer.Reset()
 
-// 	for frame := range c.framChannel {
-// 		switch f := frame.(type) {
-// 		case *http2.HeadersFrame:
-// 			if f.StreamID != ID {
-// 				go func() {
-// 					c.framChannel <- frame
-// 				}()
-// 				continue
-// 			}
+	loop := 0
+	usePool := true
+	var frame interface{}
 
-// 			_, err := RES.Header.decoder.Write(f.HeaderBlockFragment())
-// 			if err != nil {
-// 				return &RegnError{Message: "Field decode response headers; err: " + err.Error()}
-// 			}
+	for c.run {
+		if usePool {
+			frame = c.prmPool.Get()
+			loop++
+		} else {
+			frame, _ = c.theFrame.ReadFrame()
+		}
 
-// 			if f.StreamEnded() {
-// 				return nil
-// 			}
+		switch f := frame.(type) {
+		case *http2FrameForPool:
+			if f.StreamID != ID {
+				loop++
+				c.secPool.Put(f)
+				f = nil
+				continue
+			}
 
-// 		case *http2.DataFrame:
-// 			if f.StreamID != ID {
-// 				go func() {
-// 					c.framChannel <- frame
-// 				}()
-// 				continue
-// 			}
+			if f.Length == 0 {
+				RES.Header.decoder.Write(f.Content.Bytes())
+			} else {
+				c.winBlock += f.Length
+				RES.Header.thebuffer.Write(f.Content.Bytes())
+				if RES.Header.contectLegnth <= RES.Header.thebuffer.Len() || bytes.Contains(f.Content.Bytes(), lines) {
+					c.run = false
+				}
+			}
+			f.Content.Reset()
+			bufferPool.Put(f.Content)
+			f = nil
+		case *http2.HeadersFrame:
+			if f.StreamID != ID {
+				loop++
+				fr := &http2FrameForPool{Content: bufferPool.Get(), StreamID: f.StreamID}
+				fr.Content.Write(f.HeaderBlockFragment())
+				c.secPool.Put(fr)
+				fr = nil
+				f = nil
+				continue
+			}
 
-// 			RES.Header.thebuffer.Write(f.Data())
+			RES.Header.decoder.Write(f.HeaderBlockFragment())
 
-// 			if err := c.theFrame.WriteWindowUpdate(1, uint32(len(f.Data()))); err != nil {
-// 				return &RegnError{Message: "Failed to send window update; err: " + err.Error()}
-// 			}
+			if f.StreamEnded() {
+				c.run = false
+			}
+			f = nil
+		case *http2.DataFrame:
+			if f.StreamID != ID {
+				loop++
+				fr := &http2FrameForPool{Content: bufferPool.Get(), StreamID: f.StreamID, Length: f.Length}
+				fr.Content.Write(f.Data())
+				c.secPool.Put(fr)
+				fr = nil
+				f = nil
+				continue
+			}
 
-// 			if f.StreamEnded() {
-// 				return nil
-// 			}
+			c.winBlock += f.Length
+			RES.Header.thebuffer.Write(f.Data())
+			if f.StreamEnded() || RES.Header.contectLegnth <= RES.Header.thebuffer.Len() || bytes.Contains(f.Data(), lines) {
+				c.run = false
+			}
 
-// 		case *http2.GoAwayFrame:
-// 			c.Close()
-// 			return &RegnError{Message: "The Connection has been closed"}
-// 		}
-// 		frame = nil
+			f = nil
+		case *http2.GoAwayFrame:
+			c.Close()
+			f = nil
+			return &RegnError{Message: "the connection has been close by the server"}
 
-// 	}
-// 	return nil
-// }
+		case nil:
+			if usePool {
+				loop--
+				usePool = false
+			} else {
+				c.Close()
+				return &RegnError{Message: "the connection has been close by the server"}
+			}
+		}
+		frame = nil
+	}
+
+	for loop != 0 {
+		loop--
+		c.prmPool.Put(c.secPool.Get())
+	}
+
+	return nil
+}
 
 func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
+	if c.upgraded {
+		id := c.Http2GenId()
+		if err := c.Http2SendRequest(REQ, id); err != nil {
+			return err
+		}
+		if err := c.Http2ReadRespone(RES, id); err != nil {
+			return err
+		}
+
+		return nil
+	}
+
 	if err := c.Connect(REQ); err != nil {
 		return err
 	}
 
 	if c.TimeoutRead != 0 {
-		c.connection.SetDeadline(time.Now().Add(time.Duration(c.TimeoutRead) * time.Second))
+		c.Dialer.Deadline = time.Now().Add(time.Duration(c.TimeoutRead) * time.Second)
 		c.TimeoutRead = 0
 	}
 
 	c.run = true
 
+	if REQ.Header.hpackHeaders != nil {
+		REQ.HttpDowngrade()
+	}
+
+	if RES.Header.decoder != nil {
+		RES.HttpDowngrade()
+	}
+
 	c.flusher.Write(REQ.Header.raw.B)
 	if err := c.flusher.Flush(); err != nil {
 		c.Close()
-		return &RegnError{Message: " writing error\n" + err.Error()}
+		return &RegnError{Message: "field send request"}
 	}
 
 	RES.Header.thebuffer.Reset()
@@ -438,7 +554,7 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 		le := c.peeker.Buffered()
 		if le == 0 {
 			c.Close()
-			return &RegnError{Message: " timeout reading"}
+			return &RegnError{Message: "read timeout"}
 		}
 
 		peeked, _ := c.peeker.Peek(le)
@@ -446,17 +562,17 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 		RES.Header.thebuffer.Write(peeked)
 		peeked = nil
 
-		if bytes.Contains(RES.Header.thebuffer.B, tow_lines) {
-			contentLengthMatch := contetre.FindSubmatch(RES.Header.thebuffer.B) // changed form (*RES.Header.thebuffer).B
+		if bytes.Contains(RES.Header.thebuffer.B, lines[1:]) {
+			contentLengthMatch := lenRegex.FindSubmatch(RES.Header.thebuffer.B)
 			if len(contentLengthMatch) > 1 {
 				contentLength, _ := strconv.Atoi(string(contentLengthMatch[1]))
 				contentLengthMatch[0] = nil
 				contentLengthMatch[1] = nil
 
-				if len(bytes.SplitN(RES.Header.thebuffer.B, tow_lines, 2)[1]) >= contentLength {
+				if len(bytes.SplitN(RES.Header.thebuffer.B, lines[1:], 2)[1]) >= contentLength {
 					break
 				}
-			} else if bytes.Contains(RES.Header.thebuffer.B, zero_lines) {
+			} else if bytes.Contains(RES.Header.thebuffer.B, lines) {
 				break
 			}
 		}

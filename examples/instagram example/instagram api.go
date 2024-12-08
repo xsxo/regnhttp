@@ -7,7 +7,7 @@ import (
 	regn "github.com/xsxo/regnhttp"
 )
 
-func InstagramEx() {
+func main() {
 	// create request object
 	req := regn.Request()
 

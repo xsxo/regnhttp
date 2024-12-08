@@ -14,20 +14,17 @@ type RegnError struct {
 }
 
 var (
-	bytes_pool bytebufferpool.Pool
-	nwpool     *sync.Pool = &sync.Pool{}
-	nrpool     *sync.Pool = &sync.Pool{}
+	bufferPool  bytebufferpool.Pool
+	peekerPool  *sync.Pool = &sync.Pool{}
+	flusherPool *sync.Pool = &sync.Pool{}
 
-	status_code_regexp *regexp.Regexp = regexp.MustCompile(`HTTP/1.1 (\d{3})`)
-	reason_regexp      *regexp.Regexp = regexp.MustCompile(`HTTP/1.1 (\d{3} .*)`)
+	statusRegex *regexp.Regexp = regexp.MustCompile(`HTTP/1.1 (\d{3})`)
+	reasonRegex *regexp.Regexp = regexp.MustCompile(`HTTP/1.1 (\d{3} .*)`)
 
-	contetre *regexp.Regexp = regexp.MustCompile(`Content-Length: (\d+)`)
+	lenRegex *regexp.Regexp = regexp.MustCompile(`Content-Length: (\d+)`)
 
-	// delete all this var's and keep zero_lines -> the_lines
-	tow_lines  []byte = []byte{13, 10, 13, 10}
-	zero_lines []byte = []byte{48, 13, 10, 13, 10}
-	one_line   []byte = []byte{13, 10}
-	space_line []byte = []byte{32}
+	lines     []byte = []byte{48, 13, 10, 13, 10}
+	SpaceByte []byte = []byte(" ")
 )
 
 const (
@@ -39,8 +36,12 @@ const (
 	MethodTrace   string = "TRACE"
 )
 
-func get_reader(Conn net.Conn) *bufio.Reader {
-	nr := nrpool.Get()
+func (e *RegnError) Error() string {
+	return "regnhttp error: " + e.Message
+}
+
+func genPeeker(Conn net.Conn) *bufio.Reader {
+	nr := peekerPool.Get()
 
 	if nr == nil {
 		return bufio.NewReader(Conn)
@@ -51,8 +52,8 @@ func get_reader(Conn net.Conn) *bufio.Reader {
 	return nrr
 }
 
-func get_writer(Conn net.Conn) *bufio.Writer {
-	nw := nwpool.Get()
+func genFlusher(Conn net.Conn) *bufio.Writer {
+	nw := flusherPool.Get()
 
 	if nw == nil {
 		return bufio.NewWriter(Conn)

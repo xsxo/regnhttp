@@ -10,63 +10,78 @@ import (
 	"golang.org/x/net/http2/hpack"
 )
 
-type headers_struct struct {
-	thebuffer bytebufferpool.ByteBuffer
-	decoder   *hpack.Decoder
-	headers   []hpack.HeaderField
+type headStruct struct {
+	thebuffer     bytebufferpool.ByteBuffer
+	decoder       *hpack.Decoder
+	headers       []hpack.HeaderField
+	contectLegnth int
 }
 
 type ResponseType struct {
-	Header *headers_struct
+	Header *headStruct
 }
-
-func Response() *ResponseType {
-	return &ResponseType{Header: &headers_struct{thebuffer: *bytes_pool.Get()}}
-}
-
-// func Http2Response() *ResponseType {
-// 	to_return := &ResponseType{Header: &headers_struct{thebuffer: *bytes_pool.Get(), headers: []hpack.HeaderField{}}}
-
-// 	to_return.Header.decoder = hpack.NewDecoder(4096, func(f hpack.HeaderField) {
-// 		to_return.Header.headers = append(to_return.Header.headers, f)
-// 	})
-
-// 	return to_return
-// }
 
 func (RES *ResponseType) Close() {
 	RES.Header.thebuffer.Reset()
-	bytes_pool.Put(&RES.Header.thebuffer)
+	bufferPool.Put(&RES.Header.thebuffer)
 }
 
-// func (RES *ResponseType) upgradeH2c() {
-// 	RES.Header.headers = []hpack.HeaderField{}
-// 	RES.Header.decoder = hpack.NewDecoder(4096, func(f hpack.HeaderField) {
-// 		RES.Header.headers = append(RES.Header.headers, f)
-// 	})
-// }
+func Response() *ResponseType {
+	return &ResponseType{Header: &headStruct{thebuffer: *bufferPool.Get()}}
+}
+
+func Http2Response() *ResponseType {
+	toReturn := &ResponseType{Header: &headStruct{thebuffer: *bufferPool.Get(), headers: []hpack.HeaderField{}}}
+
+	toReturn.Header.decoder = hpack.NewDecoder(4096, func(f hpack.HeaderField) {
+		toReturn.Header.headers = append(toReturn.Header.headers, f)
+		if strings.EqualFold(f.Name, "content-length") {
+			toReturn.Header.contectLegnth, _ = strconv.Atoi(f.Value)
+		}
+	})
+
+	return toReturn
+}
+
+func (RES *ResponseType) Http2Upgrade() {
+	RES.Header.headers = []hpack.HeaderField{}
+	RES.Header.decoder = hpack.NewDecoder(4096, func(f hpack.HeaderField) {
+		RES.Header.headers = append(RES.Header.headers, f)
+		if strings.EqualFold(f.Name, "content-length") {
+			RES.Header.contectLegnth, _ = strconv.Atoi(f.Value)
+		}
+	})
+}
+
+func (RES *ResponseType) HttpDowngrade() {
+	if RES.Header.decoder != nil {
+		RES.Header.headers = nil
+		RES.Header.decoder.Close()
+		RES.Header.decoder = nil
+	}
+}
 
 func (RES *ResponseType) StatusCode() int {
 	if RES.Header.decoder != nil {
 		if len(RES.Header.headers) == 0 {
 			return 0
-		} else if stauts_code, err := strconv.Atoi(RES.Header.headers[0].Value); err == nil {
-			return stauts_code
+		} else if statusCode, err := strconv.Atoi(RES.Header.headers[0].Value); err == nil {
+			return statusCode
 		} else {
 			return 0
 		}
 	} else {
-		matches := status_code_regexp.FindSubmatch(RES.Header.thebuffer.B)
+		matches := statusRegex.FindSubmatch(RES.Header.thebuffer.B)
 		if len(matches) < 2 {
 			return 0
-		} else if status_code, err := strconv.Atoi(string(matches[1])); err != nil {
+		} else if statusCode, err := strconv.Atoi(string(matches[1])); err != nil {
 			matches[0] = nil
 			matches[1] = nil
 			return 0
 		} else {
 			matches[0] = nil
 			matches[1] = nil
-			return status_code
+			return statusCode
 		}
 	}
 }
@@ -79,17 +94,17 @@ func (RES *ResponseType) Reason() string {
 			return RES.Header.headers[0].Value
 		}
 	} else {
-		matches := reason_regexp.FindSubmatch(RES.Header.thebuffer.B)
+		matches := reasonRegex.FindSubmatch(RES.Header.thebuffer.B)
 
 		if len(matches) < 2 {
 			return ""
 		}
 
-		to_return := string(matches[1])
+		toReturn := string(matches[1])
 
 		matches[0] = nil
 		matches[1] = nil
-		return to_return
+		return toReturn
 	}
 }
 
@@ -111,7 +126,7 @@ func (RES *ResponseType) Body() []byte {
 	if RES.Header.decoder != nil {
 		return RES.Header.thebuffer.B
 	} else {
-		splied := bytes.SplitN(RES.Header.thebuffer.B, tow_lines, 2)
+		splied := bytes.SplitN(RES.Header.thebuffer.B, lines[1:], 2)
 
 		if len(splied) < 2 {
 			return nil
@@ -129,14 +144,14 @@ func (RES *ResponseType) Json() (map[string]interface{}, error) {
 	err := json.Unmarshal(RES.Body(), &result)
 
 	if err != nil {
-		NewErr.Message = "Field decode body to json format"
+		NewErr.Message = "field decode body to json format"
 		return result, NewErr
 	}
 
 	return result, nil
 }
 
-func (HEAD *headers_struct) GetAll() map[string]string {
+func (HEAD *headStruct) GetAll() map[string]string {
 	forReturn := make(map[string]string)
 
 	if HEAD.decoder != nil {
@@ -162,7 +177,7 @@ func (HEAD *headers_struct) GetAll() map[string]string {
 	return forReturn
 }
 
-func (HEAD *headers_struct) Get(name string) string {
+func (HEAD *headStruct) Get(name string) string {
 	forNothing := strings.Split(HEAD.thebuffer.String(), "\n")[1:]
 
 	if HEAD.decoder != nil {
