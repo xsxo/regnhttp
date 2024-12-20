@@ -176,7 +176,7 @@ func (REQ *RequestType) SetURL(Url string) {
 	if err != nil {
 		panic("invalid url request \n" + err.Error())
 	} else if Parse.Scheme == "" {
-		panic("no supplied url scheme \n" + err.Error())
+		panic("no supplied url scheme")
 	}
 
 	if Parse.Port() != "" {

@@ -8,7 +8,6 @@ import (
 	"net"
 	"net/url"
 	"strconv"
-	"sync"
 	"time"
 
 	"github.com/valyala/bytebufferpool"
@@ -28,8 +27,7 @@ type Client struct {
 	// Dialer to create dial connection
 	Dialer *net.Dialer
 
-	// Max Requests & Responses in same time
-	Http2MaxIds uint32
+	h2MaxIds uint32
 
 	useProxy      bool
 	hostConnected string
@@ -46,28 +44,23 @@ type Client struct {
 	theFrame      *http2.Framer
 	streamId      uint32
 
-	prmPool  *sync.Pool
-	secPool  *sync.Pool
-	winBlock uint32
-}
-
-type http2FrameForPool struct {
-	Content  *bytebufferpool.ByteBuffer
-	Length   uint32
-	StreamID uint32
+	theBuffer *bytebufferpool.ByteBuffer
+	winBlock  uint32
 }
 
 func (c *Client) ReturnFrame() *http2.Framer {
 	return c.theFrame
 }
 
-func (c *Client) Http2GenId() uint32 {
-	if c.streamId == 0 {
-		c.streamId++
-		return c.streamId
-	}
-	c.streamId += 2
+func (c *Client) Http2MaxIds() uint32 {
+	return c.h2MaxIds
+}
 
+func (c *Client) Http2GenId() uint32 {
+	if c.streamId <= c.h2MaxIds {
+		c.streamId = 0
+	}
+	c.streamId += 1
 	return c.streamId
 }
 
@@ -91,8 +84,8 @@ func (c *Client) HttpDowngrade() {
 	if c.upgraded {
 		c.Close()
 		c.upgraded = false
-		c.prmPool = nil
-		c.secPool = nil
+		// c.prmPool = nil
+		// c.secPool = nil
 	}
 }
 
@@ -100,8 +93,9 @@ func (c *Client) Http2Upgrade() {
 	c.Close()
 	c.upgraded = true
 
-	c.prmPool = &sync.Pool{}
-	c.secPool = &sync.Pool{}
+	if c.theBuffer == nil {
+		c.theBuffer = bufferPool.Get()
+	}
 }
 
 func (c *Client) connectNet(host string, port string) error {
@@ -174,8 +168,8 @@ func (c *Client) connectHost(address string) error {
 }
 
 func (c *Client) Proxy(Url string) {
-	if c.connection != nil {
-		c.Close()
+	if c.hostConnected != "" {
+		panic("can not set proxy after send request")
 	}
 
 	c.hostConnected = ""
@@ -225,27 +219,8 @@ func (c *Client) Close() {
 		c.theFrame = nil
 	}
 
-	if c.prmPool != nil {
-		c.emtpyPools()
-	}
-
+	c.upgraded = false
 	c.run = false
-}
-
-func (c *Client) emtpyPools() {
-	for {
-		frame := c.prmPool.Get()
-		if frame == nil {
-			break
-		}
-	}
-
-	for {
-		frame := c.secPool.Get()
-		if frame == nil {
-			break
-		}
-	}
 }
 
 func (c *Client) closeLines() {
@@ -273,7 +248,7 @@ func (c *Client) Connect(REQ *RequestType) error {
 
 	if c.TlsConfig == nil {
 		c.TlsConfig = &tls.Config{}
-		c.TlsConfig.InsecureSkipVerify = true
+		c.TlsConfig.InsecureSkipVerify = false
 	}
 
 	if c.run {
@@ -330,15 +305,11 @@ func (c *Client) Connect(REQ *RequestType) error {
 			c.closeLines()
 			c.theFrame = http2.NewFramer(c.connection, c.connection)
 
-			if c.Http2MaxIds == 0 {
-				c.Http2MaxIds = 12263
-			}
-
 			if err := c.theFrame.WriteSettings([]http2.Setting{
-				{ID: http2.SettingMaxConcurrentStreams, Val: uint32(c.Http2MaxIds)},
-				{ID: http2.SettingInitialWindowSize, Val: uint32(65535)},
-				{ID: http2.SettingHeaderTableSize, Val: uint32(4096)},
-				{ID: http2.SettingMaxHeaderListSize, Val: uint32(4096)},
+				{ID: http2.SettingMaxConcurrentStreams, Val: 12263},
+				{ID: http2.SettingInitialWindowSize, Val: 65535},
+				{ID: http2.SettingHeaderTableSize, Val: 4096},
+				{ID: http2.SettingMaxHeaderListSize, Val: 4096},
 			}...); err != nil {
 				c.Close()
 				return &RegnError{Message: "field send HTTP2 settings to the server"}
@@ -346,10 +317,16 @@ func (c *Client) Connect(REQ *RequestType) error {
 
 			if frame, err := c.theFrame.ReadFrame(); err != nil {
 				return &RegnError{Message: "field read HTTP2 settings from the server"}
-			} else if _, ok := frame.(*http2.SettingsFrame); !ok {
+			} else if f, ok := frame.(*http2.SettingsFrame); ok {
+				f.ForeachSetting(func(s http2.Setting) error {
+					if s.ID.String() == "MAX_CONCURRENT_STREAMS" {
+						c.h2MaxIds = s.Val
+					}
+					return nil
+				})
+			} else {
 				return &RegnError{Message: "field foramt HTTP2 settings from the server"}
 			}
-
 		}
 		c.hostConnected = REQ.Header.myhost
 	}
@@ -360,6 +337,10 @@ func (c *Client) Connect(REQ *RequestType) error {
 func (c *Client) Http2SendRequest(REQ *RequestType, ID uint32) error {
 	if !c.upgraded {
 		c.Http2Upgrade()
+	}
+
+	if ID%2 == 0 {
+		panic("id is not odd")
 	}
 
 	if err := c.Connect(REQ); err != nil {
@@ -391,11 +372,11 @@ func (c *Client) Http2SendRequest(REQ *RequestType, ID uint32) error {
 		return &RegnError{Message: "field send http2 request\n" + err.Error()}
 	}
 
-	if c.winBlock >= 60000 {
-		if err := c.theFrame.WriteWindowUpdate(c.streamId, c.winBlock); err != nil {
-			return &RegnError{Message: "field send HTTP2 settings to the server"}
-		}
-	}
+	// if c.winBlock >= 60000 {
+	// 	if err := c.theFrame.WriteWindowUpdate(c.streamId, c.winBlock); err != nil {
+	// 		return &RegnError{Message: "field send HTTP2 settings to the server"}
+	// 	}
+	// }
 
 	c.run = false
 	return nil
@@ -405,11 +386,15 @@ func (c *Client) Http2ReadRespone(RES *ResponseType, ID uint32) error {
 	if c.run {
 		panic("concurrent client reader")
 	} else if !c.upgraded {
-		RES.Header.contectLegnth = -1
-		RES.Header.thebuffer.Reset()
 		c.Http2Upgrade()
 		return nil
-	} else if RES.Header.decoder == nil {
+	}
+
+	if ID%2 == 0 {
+		panic("id is not odd")
+	}
+
+	if RES.Header.decoder == nil {
 		RES.Http2Upgrade()
 	}
 
@@ -417,47 +402,36 @@ func (c *Client) Http2ReadRespone(RES *ResponseType, ID uint32) error {
 	RES.Header.contectLegnth = -1
 	RES.Header.thebuffer.Reset()
 
-	loop := 0
-	usePool := true
-	var frame interface{}
+	headStart := []byte{byte(ID), 0x11}
+	indexHead := bytes.Index(c.theBuffer.B, headStart)
+
+	if indexHead != -1 {
+		HeadEnd := bytes.Index(c.theBuffer.B, []byte{byte(ID), 0x14})
+		RES.Header.decoder.Write(c.theBuffer.B[indexHead+2 : HeadEnd])
+		c.theBuffer.B = append(c.theBuffer.B[:indexHead], c.theBuffer.B[HeadEnd+2:]...)
+	}
+
+	bodyStart := []byte{byte(ID), 0x91}
+	indexBody := bytes.Index(c.theBuffer.B, bodyStart)
+
+	if indexBody != -1 {
+		bodyEnd := bytes.Index(c.theBuffer.B, []byte{byte(ID), 0x94})
+		RES.Header.thebuffer.Write(c.theBuffer.B[indexBody+2 : bodyEnd])
+		c.theBuffer.B = append(c.theBuffer.B[:indexBody], c.theBuffer.B[bodyEnd+2:]...)
+		if RES.Header.contectLegnth == RES.Header.thebuffer.Len() || bytes.Contains(RES.Header.thebuffer.B, lines) {
+			c.run = false
+		}
+		c.run = false
+	}
 
 	for c.run {
-		if usePool {
-			frame = c.prmPool.Get()
-			loop++
-		} else {
-			frame, _ = c.theFrame.ReadFrame()
-		}
-
+		frame, _ := c.theFrame.ReadFrame()
 		switch f := frame.(type) {
-		case *http2FrameForPool:
-			if f.StreamID != ID {
-				loop++
-				c.secPool.Put(f)
-				f = nil
-				continue
-			}
-
-			if f.Length == 0 {
-				RES.Header.decoder.Write(f.Content.Bytes())
-			} else {
-				c.winBlock += f.Length
-				RES.Header.thebuffer.Write(f.Content.Bytes())
-				if RES.Header.contectLegnth <= RES.Header.thebuffer.Len() || bytes.Contains(f.Content.Bytes(), lines) {
-					c.run = false
-				}
-			}
-			f.Content.Reset()
-			bufferPool.Put(f.Content)
-			f = nil
 		case *http2.HeadersFrame:
 			if f.StreamID != ID {
-				loop++
-				fr := &http2FrameForPool{Content: bufferPool.Get(), StreamID: f.StreamID}
-				fr.Content.Write(f.HeaderBlockFragment())
-				c.secPool.Put(fr)
-				fr = nil
-				f = nil
+				c.theBuffer.Write([]byte{byte(f.StreamID), 0x11})
+				c.theBuffer.Write(f.HeaderBlockFragment())
+				c.theBuffer.Write([]byte{byte(f.StreamID), 0x14})
 				continue
 			}
 
@@ -468,43 +442,47 @@ func (c *Client) Http2ReadRespone(RES *ResponseType, ID uint32) error {
 			}
 			f = nil
 		case *http2.DataFrame:
+			// if err := c.theFrame.WriteWindowUpdate(c.streamId, uint32(len(f.Data()))); err != nil {
+			// 	return &RegnError{Message: "field send HTTP2 settings to the server"}
+			// }
+
 			if f.StreamID != ID {
-				loop++
-				fr := &http2FrameForPool{Content: bufferPool.Get(), StreamID: f.StreamID, Length: f.Length}
-				fr.Content.Write(f.Data())
-				c.secPool.Put(fr)
-				fr = nil
-				f = nil
+				// bodyStart[0] = byte(f.StreamID)
+				c.theBuffer.Write([]byte{byte(f.StreamID), 0x91})
+				c.theBuffer.Write(f.Data())
+				c.theBuffer.Write([]byte{byte(f.StreamID), 0x94})
 				continue
 			}
 
 			c.winBlock += f.Length
 			RES.Header.thebuffer.Write(f.Data())
-			if f.StreamEnded() || RES.Header.contectLegnth <= RES.Header.thebuffer.Len() || bytes.Contains(f.Data(), lines) {
+
+			if f.StreamEnded() {
 				c.run = false
 			}
 
 			f = nil
 		case *http2.GoAwayFrame:
 			c.Close()
-			f = nil
-			return &RegnError{Message: "the connection has been close by the server"}
+			return &RegnError{Message: "the connection has been closed by the server 'http2.GoAwayFrame'\n" + "response: " + f.ErrCode.String()}
+
+		case *http2.RSTStreamFrame:
+			c.run = false
+			return &RegnError{Message: "the request id has been cancelled by the server '" + f.ErrCode.String() + "'"}
+
+		case *http2.SettingsFrame:
+			f.ForeachSetting(func(s http2.Setting) error {
+				if s.ID.String() == "MAX_CONCURRENT_STREAMS" {
+					c.h2MaxIds = s.Val
+				}
+
+				return nil
+			})
 
 		case nil:
-			if usePool {
-				loop--
-				usePool = false
-			} else {
-				c.Close()
-				return &RegnError{Message: "the connection has been close by the server"}
-			}
+			return &RegnError{Message: "the connection has been closed by the server (http2.NilFrame)"}
 		}
 		frame = nil
-	}
-
-	for loop != 0 {
-		loop--
-		c.prmPool.Put(c.secPool.Get())
 	}
 
 	return nil
