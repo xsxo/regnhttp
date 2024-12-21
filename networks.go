@@ -5,8 +5,11 @@ import (
 	"bytes"
 	"crypto/tls"
 	"encoding/base64"
+	"encoding/binary"
+	"fmt"
 	"net"
 	"net/url"
+	"os"
 	"strconv"
 	"time"
 
@@ -45,7 +48,6 @@ type Client struct {
 	streamId      uint32
 
 	theBuffer *bytebufferpool.ByteBuffer
-	winBlock  uint32
 }
 
 func (c *Client) ReturnFrame() *http2.Framer {
@@ -213,12 +215,11 @@ func (c *Client) Close() {
 		}
 	}
 
-	if c.theFrame == nil {
-		c.closeLines()
-	} else {
-		c.theFrame = nil
+	if c.theBuffer != nil {
+		c.theBuffer.Reset()
 	}
 
+	c.closeLines()
 	c.upgraded = false
 	c.run = false
 }
@@ -302,7 +303,7 @@ func (c *Client) Connect(REQ *RequestType) error {
 				return err
 			}
 
-			c.closeLines()
+			// c.closeLines()
 			c.theFrame = http2.NewFramer(c.connection, c.connection)
 
 			if err := c.theFrame.WriteSettings([]http2.Setting{
@@ -357,26 +358,42 @@ func (c *Client) Http2SendRequest(REQ *RequestType, ID uint32) error {
 		REQ.Http2Upgrade()
 	}
 
-	if err := c.theFrame.WriteHeaders(http2.HeadersFrameParam{
-		StreamID:      ID,
-		BlockFragment: REQ.Header.raw.B,
-		EndHeaders:    true,
-		EndStream:     false,
-	}); err != nil {
-		c.Close()
-		return &RegnError{Message: "field send http2 request\n" + err.Error()}
-	}
+	bufHeaders := bytes.Buffer{}
+	flagsHeaders := byte(0)
+	flagsHeaders |= 0x4 // end headers (no end stream)
 
-	if err := c.theFrame.WriteData(ID, true, REQ.Header.rawBody.B); err != nil {
-		c.Close()
-		return &RegnError{Message: "field send http2 request\n" + err.Error()}
-	}
+	payloadLengthHeaders := REQ.Header.raw.Len()
+	bufHeaders.Write([]byte{
+		byte(payloadLengthHeaders >> 16),
+		byte(payloadLengthHeaders >> 8),
+		byte(payloadLengthHeaders),
+	})
 
-	// if c.winBlock >= 60000 {
-	// 	if err := c.theFrame.WriteWindowUpdate(c.streamId, c.winBlock); err != nil {
-	// 		return &RegnError{Message: "field send HTTP2 settings to the server"}
-	// 	}
-	// }
+	bufHeaders.WriteByte(0x1) // type of headers
+	bufHeaders.WriteByte(flagsHeaders)
+	binary.Write(&bufHeaders, binary.BigEndian, ID&0x7FFFFFFF)
+	bufHeaders.Write(REQ.Header.raw.Bytes())
+
+	// إعداد إطار الجسم (DATA)
+	bufBody := bytes.Buffer{}
+	flagsBody := byte(0)
+	flagsBody |= 0x1 // end stream
+
+	payloadLengthBody := REQ.Header.rawBody.Len()
+	bufBody.Write([]byte{
+		byte(payloadLengthBody >> 16),
+		byte(payloadLengthBody >> 8),
+		byte(payloadLengthBody),
+	})
+	bufBody.WriteByte(0x0) // type of body
+	bufBody.WriteByte(flagsBody)
+	binary.Write(&bufBody, binary.BigEndian, ID&0x7FFFFFFF)
+	bufBody.Write(REQ.Header.rawBody.Bytes())
+
+	// إرسال الإطارات
+	c.flusher.Write(bufHeaders.Bytes())
+	c.flusher.Write(bufBody.Bytes())
+	c.flusher.Flush()
 
 	c.run = false
 	return nil
@@ -387,11 +404,13 @@ func (c *Client) Http2ReadRespone(RES *ResponseType, ID uint32) error {
 		panic("concurrent client reader")
 	} else if !c.upgraded {
 		c.Http2Upgrade()
-		return nil
+		return &RegnError{"not found id"}
 	}
 
 	if ID%2 == 0 {
 		panic("id is not odd")
+	} else if c.hostConnected == "" {
+		return &RegnError{"not found id"}
 	}
 
 	if RES.Header.decoder == nil {
@@ -402,87 +421,110 @@ func (c *Client) Http2ReadRespone(RES *ResponseType, ID uint32) error {
 	RES.Header.contectLegnth = -1
 	RES.Header.thebuffer.Reset()
 
-	headStart := []byte{byte(ID), 0x11}
-	indexHead := bytes.Index(c.theBuffer.B, headStart)
+	data := make([]byte, 4)
+	binary.BigEndian.PutUint32(data, ID)
 
-	if indexHead != -1 {
-		HeadEnd := bytes.Index(c.theBuffer.B, []byte{byte(ID), 0x14})
-		RES.Header.decoder.Write(c.theBuffer.B[indexHead+2 : HeadEnd])
-		c.theBuffer.B = append(c.theBuffer.B[:indexHead], c.theBuffer.B[HeadEnd+2:]...)
-	}
+	indexRaw := bytes.Index(c.theBuffer.B, data) - 5
+	for indexRaw > -1 {
+		payloadLength := int(binary.BigEndian.Uint32(append([]byte{0}, c.theBuffer.B[indexRaw:indexRaw+3]...))) + 9 + indexRaw
+		if payloadLength > c.theBuffer.Len() {
+			fmt.Println("<<<")
+			os.Exit(1)
+		}
 
-	bodyStart := []byte{byte(ID), 0x91}
-	indexBody := bytes.Index(c.theBuffer.B, bodyStart)
+		// raw := c.theBuffer.B[indexRaw:payloadLength]
 
-	if indexBody != -1 {
-		bodyEnd := bytes.Index(c.theBuffer.B, []byte{byte(ID), 0x94})
-		RES.Header.thebuffer.Write(c.theBuffer.B[indexBody+2 : bodyEnd])
-		c.theBuffer.B = append(c.theBuffer.B[:indexBody], c.theBuffer.B[bodyEnd+2:]...)
-		if RES.Header.contectLegnth == RES.Header.thebuffer.Len() || bytes.Contains(RES.Header.thebuffer.B, lines) {
+		switch c.theBuffer.B[indexRaw+3] {
+		case 0x0:
+			// fmt.Println("stream id:", ID)
+			// fmt.Println("len body from index:", len(raw[9:payloadLength]))
+			// RES.Header.thebuffer.Write(raw[9 : payloadLength-9])
+			RES.Header.thebuffer.Write(c.theBuffer.B[indexRaw+9 : payloadLength])
+		case 0x1:
+			// fmt.Println("stream id:", ID)
+			// fmt.Println("len headers from index:", len(raw[9:payloadLength]))
+			// RES.Header.decoder.Write(raw[9 : payloadLength-9])
+			RES.Header.decoder.Write(c.theBuffer.B[indexRaw+9 : payloadLength])
+		}
+
+		if c.theBuffer.B[indexRaw+4]&0x1 != 0 {
 			c.run = false
 		}
-		c.run = false
+		// fmt.Println("len:", c.theBuffer.Len())
+		c.theBuffer.B = append(c.theBuffer.B[:indexRaw], c.theBuffer.B[payloadLength:]...)
+		indexRaw = bytes.Index(c.theBuffer.B, data) - 5
 	}
 
+	// done without any problem
 	for c.run {
-		frame, _ := c.theFrame.ReadFrame()
-		switch f := frame.(type) {
-		case *http2.HeadersFrame:
-			if f.StreamID != ID {
-				c.theBuffer.Write([]byte{byte(f.StreamID), 0x11})
-				c.theBuffer.Write(f.HeaderBlockFragment())
-				c.theBuffer.Write([]byte{byte(f.StreamID), 0x14})
-				continue
-			}
-
-			RES.Header.decoder.Write(f.HeaderBlockFragment())
-
-			if f.StreamEnded() {
-				c.run = false
-			}
-			f = nil
-		case *http2.DataFrame:
-			// if err := c.theFrame.WriteWindowUpdate(c.streamId, uint32(len(f.Data()))); err != nil {
-			// 	return &RegnError{Message: "field send HTTP2 settings to the server"}
-			// }
-
-			if f.StreamID != ID {
-				// bodyStart[0] = byte(f.StreamID)
-				c.theBuffer.Write([]byte{byte(f.StreamID), 0x91})
-				c.theBuffer.Write(f.Data())
-				c.theBuffer.Write([]byte{byte(f.StreamID), 0x94})
-				continue
-			}
-
-			c.winBlock += f.Length
-			RES.Header.thebuffer.Write(f.Data())
-
-			if f.StreamEnded() {
-				c.run = false
-			}
-
-			f = nil
-		case *http2.GoAwayFrame:
-			c.Close()
-			return &RegnError{Message: "the connection has been closed by the server 'http2.GoAwayFrame'\n" + "response: " + f.ErrCode.String()}
-
-		case *http2.RSTStreamFrame:
-			c.run = false
-			return &RegnError{Message: "the request id has been cancelled by the server '" + f.ErrCode.String() + "'"}
-
-		case *http2.SettingsFrame:
-			f.ForeachSetting(func(s http2.Setting) error {
-				if s.ID.String() == "MAX_CONCURRENT_STREAMS" {
-					c.h2MaxIds = s.Val
-				}
-
-				return nil
-			})
-
-		case nil:
-			return &RegnError{Message: "the connection has been closed by the server (http2.NilFrame)"}
+		if _, err := c.peeker.Peek(9); err != nil {
+			return &RegnError{Message: "timeout error"}
 		}
-		frame = nil
+
+		buffred := c.peeker.Buffered()
+
+		if buffred == 0 {
+			c.Close()
+			return &RegnError{Message: "timeout error"}
+		}
+
+		raw, err := c.peeker.Peek(buffred)
+		if err != nil {
+			c.Close()
+			return &RegnError{Message: "timeout error"}
+		}
+
+		StreamId := binary.BigEndian.Uint32(raw[5:9]) & 0x7FFFFFFF
+		payloadLength := int(binary.BigEndian.Uint32(append([]byte{0}, raw[0:3]...))) + 9
+		c.peeker.Discard(payloadLength)
+
+		// if payloadLength == len(raw) {
+		// 	fmt.Println("==")
+		// } else {
+		// 	fmt.Println("len raw:", len(raw))
+		// 	fmt.Println("payload legnth:", payloadLength)
+		// }
+
+		switch raw[3] {
+		case 0x0:
+			// fmt.Println("stream id:", StreamId)
+			// fmt.Println("len body from peek:", len(raw[9:payloadLength]))
+			if StreamId != ID {
+				c.theBuffer.Write(raw[:payloadLength])
+				continue
+			}
+
+			RES.Header.thebuffer.Write(raw[9:payloadLength])
+
+			if raw[4]&0x1 != 0 {
+				c.run = false
+			}
+
+		case 0x1:
+			// fmt.Println("stream id:", ID)
+			// fmt.Println("len headers from peek:", len(raw[9:payloadLength]))
+			if StreamId != ID {
+				c.theBuffer.Write(raw[:payloadLength])
+				continue
+			}
+
+			RES.Header.decoder.Write(raw[9:payloadLength])
+
+			if raw[4]&0x1 != 0 {
+				c.run = false
+			}
+
+		case 0x7:
+			c.Close()
+			return &RegnError{Message: "the connection has been closed by the server 'http2.GoAwayFrame'"}
+		case 0x3:
+			fmt.Println("from RST")
+		case 0x4:
+			fmt.Println("from settings")
+		case 0x8:
+			fmt.Println("window update")
+
+		}
 	}
 
 	return nil
