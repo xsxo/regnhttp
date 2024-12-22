@@ -1,7 +1,6 @@
 package benchmark
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 	"testing"
@@ -15,13 +14,12 @@ func BenchmarkFasthttp(b *testing.B) {
 	request := fasthttp.AcquireRequest()
 	response := fasthttp.AcquireResponse()
 
-	request.SetRequestURI("http://localhost:9911")
+	request.SetRequestURI("http://localhost")
 	request.Header.SetMethod(fasthttp.MethodPost)
 
 	c := &fasthttp.Client{}
 
 	b.StartTimer()
-	fmt.Println("start doing")
 	for Corrects != RequestsNumber && Errors != RequestsNumber {
 		stringBody := "number=" + strconv.Itoa(Corrects)
 		request.SetBodyString(stringBody)
@@ -33,8 +31,6 @@ func BenchmarkFasthttp(b *testing.B) {
 			Errors++
 		}
 	}
-
-	fmt.Println("Done:", Corrects, "Error:", Errors)
 
 	fasthttp.ReleaseRequest(request)
 	fasthttp.ReleaseResponse(response)

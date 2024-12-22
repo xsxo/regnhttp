@@ -6,15 +6,12 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/binary"
-	"fmt"
 	"net"
 	"net/url"
-	"os"
 	"strconv"
 	"time"
 
 	"github.com/valyala/bytebufferpool"
-	"golang.org/x/net/http2"
 )
 
 type Client struct {
@@ -30,7 +27,8 @@ type Client struct {
 	// Dialer to create dial connection
 	Dialer *net.Dialer
 
-	h2MaxIds uint32
+	h2MaxIds  uint32
+	h2WinSize uint32
 
 	useProxy      bool
 	hostConnected string
@@ -44,23 +42,18 @@ type Client struct {
 	hostProxy     string
 	portProxy     string
 	upgraded      bool
-	theFrame      *http2.Framer
 	streamId      uint32
 
 	theBuffer *bytebufferpool.ByteBuffer
 }
 
-func (c *Client) ReturnFrame() *http2.Framer {
-	return c.theFrame
-}
-
-func (c *Client) Http2MaxIds() uint32 {
+func (c *Client) Http2MaxStreams() uint32 {
 	return c.h2MaxIds
 }
 
-func (c *Client) Http2GenId() uint32 {
+func (c *Client) h2GenStreamId() uint32 {
 	if c.streamId <= c.h2MaxIds {
-		c.streamId = 0
+		c.streamId = 4096
 	}
 	c.streamId += 1
 	return c.streamId
@@ -86,18 +79,12 @@ func (c *Client) HttpDowngrade() {
 	if c.upgraded {
 		c.Close()
 		c.upgraded = false
-		// c.prmPool = nil
-		// c.secPool = nil
 	}
 }
 
 func (c *Client) Http2Upgrade() {
 	c.Close()
 	c.upgraded = true
-
-	if c.theBuffer == nil {
-		c.theBuffer = bufferPool.Get()
-	}
 }
 
 func (c *Client) connectNet(host string, port string) error {
@@ -215,12 +202,13 @@ func (c *Client) Close() {
 		}
 	}
 
+	c.closeLines()
 	if c.theBuffer != nil {
 		c.theBuffer.Reset()
+		bufferPool.Put(c.theBuffer)
+		c.theBuffer = nil
 	}
 
-	c.closeLines()
-	c.upgraded = false
 	c.run = false
 }
 
@@ -254,7 +242,7 @@ func (c *Client) Connect(REQ *RequestType) error {
 
 	if c.run {
 		c.Close()
-		panic("concurrent client writes")
+		panic("concurrent client writers")
 	}
 
 	if c.hostConnected == "" {
@@ -293,7 +281,11 @@ func (c *Client) Connect(REQ *RequestType) error {
 				panic("http2 protocol support https requests only; use https://")
 			}
 
-			if _, err := c.flusher.Write([]byte(http2.ClientPreface)); err != nil {
+			if c.theBuffer == nil {
+				c.theBuffer = bufferPool.Get()
+			}
+
+			if _, err := c.flusher.WriteString("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"); err != nil {
 				c.Close()
 				return err
 			}
@@ -303,31 +295,33 @@ func (c *Client) Connect(REQ *RequestType) error {
 				return err
 			}
 
-			// c.closeLines()
-			c.theFrame = http2.NewFramer(c.connection, c.connection)
-
-			if err := c.theFrame.WriteSettings([]http2.Setting{
-				{ID: http2.SettingMaxConcurrentStreams, Val: 12263},
-				{ID: http2.SettingInitialWindowSize, Val: 65535},
-				{ID: http2.SettingHeaderTableSize, Val: 4096},
-				{ID: http2.SettingMaxHeaderListSize, Val: 4096},
-			}...); err != nil {
+			if _, err := c.peeker.Peek(1); err != nil {
 				c.Close()
-				return &RegnError{Message: "field send HTTP2 settings to the server"}
+				return err
 			}
 
-			if frame, err := c.theFrame.ReadFrame(); err != nil {
-				return &RegnError{Message: "field read HTTP2 settings from the server"}
-			} else if f, ok := frame.(*http2.SettingsFrame); ok {
-				f.ForeachSetting(func(s http2.Setting) error {
-					if s.ID.String() == "MAX_CONCURRENT_STREAMS" {
-						c.h2MaxIds = s.Val
-					}
-					return nil
-				})
-			} else {
+			buffred := c.peeker.Buffered()
+			raw, err := c.peeker.Peek(buffred)
+			c.peeker.Discard(buffred)
+			indexIds := bytes.IndexByte(raw, 0x03)
+			indexWin := bytes.IndexByte(raw, 0x5)
+
+			if err != nil || raw[3] != 0x4 || indexIds == -1 || indexWin == -1 {
+				c.Close()
 				return &RegnError{Message: "field foramt HTTP2 settings from the server"}
 			}
+			c.h2MaxIds = binary.BigEndian.Uint32(raw[indexIds+1 : indexIds+5])
+			c.h2WinSize = binary.BigEndian.Uint32(raw[indexWin+1 : indexWin+5])
+
+			// response settings frame
+			c.flusher.Write([]byte{0x00, 0x00, 0x00}) // payloadlenght
+			c.flusher.WriteByte(0x4)                  // settings frame
+			c.flusher.WriteByte(0x0)                  // end stream (true)
+			binary.Write(c.flusher, binary.BigEndian, uint32(0))
+			// binary.Write(c.flusher, binary.BigEndian, uint32(0x03))     // SETTINGS_MAX_CONCURRENT_STREAMS (2 bytes)
+			// binary.Write(c.flusher, binary.BigEndian, uint16(0x04))
+			// binary.Write(c.flusher, binary.BigEndian, uint32(90021324)) // Value
+			c.flusher.Flush()
 		}
 		c.hostConnected = REQ.Header.myhost
 	}
@@ -335,16 +329,16 @@ func (c *Client) Connect(REQ *RequestType) error {
 	return nil
 }
 
-func (c *Client) Http2SendRequest(REQ *RequestType, ID uint32) error {
+func (c *Client) Http2SendRequest(REQ *RequestType, StreamID uint32) error {
 	if !c.upgraded {
 		c.Http2Upgrade()
 	}
 
-	if ID%2 == 0 {
+	if StreamID%2 == 0 {
 		panic("id is not odd")
-	}
-
-	if err := c.Connect(REQ); err != nil {
+	} else if c.run {
+		panic("concurrent client writer")
+	} else if err := c.Connect(REQ); err != nil {
 		return err
 	}
 
@@ -358,62 +352,65 @@ func (c *Client) Http2SendRequest(REQ *RequestType, ID uint32) error {
 		REQ.Http2Upgrade()
 	}
 
-	bufHeaders := bytes.Buffer{}
-	flagsHeaders := byte(0)
-	flagsHeaders |= 0x4 // end headers (no end stream)
-
 	payloadLengthHeaders := REQ.Header.raw.Len()
-	bufHeaders.Write([]byte{
+	c.flusher.Write([]byte{
 		byte(payloadLengthHeaders >> 16),
 		byte(payloadLengthHeaders >> 8),
 		byte(payloadLengthHeaders),
 	})
 
-	bufHeaders.WriteByte(0x1) // type of headers
-	bufHeaders.WriteByte(flagsHeaders)
-	binary.Write(&bufHeaders, binary.BigEndian, ID&0x7FFFFFFF)
-	bufHeaders.Write(REQ.Header.raw.Bytes())
+	c.flusher.WriteByte(0x1) // type of headers
+	c.flusher.WriteByte(0x4) // end stream flag (flase) \ end header (true)
+	binary.Write(c.flusher, binary.BigEndian, StreamID&0x7FFFFFFF)
+	c.flusher.Write(REQ.Header.raw.B)
+	if err := c.flusher.Flush(); err != nil {
+		c.run = false
+		return err
+	}
 
-	// إعداد إطار الجسم (DATA)
-	bufBody := bytes.Buffer{}
-	flagsBody := byte(0)
-	flagsBody |= 0x1 // end stream
-
+	// start body frame
 	payloadLengthBody := REQ.Header.rawBody.Len()
-	bufBody.Write([]byte{
+	c.flusher.Write([]byte{
 		byte(payloadLengthBody >> 16),
 		byte(payloadLengthBody >> 8),
 		byte(payloadLengthBody),
 	})
-	bufBody.WriteByte(0x0) // type of body
-	bufBody.WriteByte(flagsBody)
-	binary.Write(&bufBody, binary.BigEndian, ID&0x7FFFFFFF)
-	bufBody.Write(REQ.Header.rawBody.Bytes())
+	c.flusher.WriteByte(0x0) // type of body
+	c.flusher.WriteByte(0x1) // end stream flag
+	binary.Write(c.flusher, binary.BigEndian, StreamID&0x7FFFFFFF)
+	c.flusher.Write(REQ.Header.rawBody.B)
+	if err := c.flusher.Flush(); err != nil {
+		c.run = false
+		return err
+	}
 
-	// إرسال الإطارات
-	c.flusher.Write(bufHeaders.Bytes())
-	c.flusher.Write(bufBody.Bytes())
-	c.flusher.Flush()
+	// winupdate
+	// if ID == 17001 {
+	// 	c.flusher.Write([]byte{0x00, 0x00, 0x04})
+	// 	c.flusher.WriteByte(0x8)
+	// 	c.flusher.WriteByte(0x00)
+	// 	binary.Write(c.flusher, binary.BigEndian, uint32(0x0))
+	// 	binary.Write(c.flusher, binary.BigEndian, uint32(c.h2WinSize-4096))
+	// 	c.flusher.Flush()
+	// }
 
 	c.run = false
 	return nil
 }
 
-func (c *Client) Http2ReadRespone(RES *ResponseType, ID uint32) error {
+func (c *Client) Http2ReadRespone(RES *ResponseType, StreamID uint32) error {
 	if c.run {
 		panic("concurrent client reader")
 	} else if !c.upgraded {
 		c.Http2Upgrade()
-		return &RegnError{"not found id"}
+		return &RegnError{"stream id is not exists"}
 	}
 
-	if ID%2 == 0 {
+	if StreamID%2 == 0 {
 		panic("id is not odd")
 	} else if c.hostConnected == "" {
-		return &RegnError{"not found id"}
-	}
-
-	if RES.Header.decoder == nil {
+		return &RegnError{"stream id is not exists"}
+	} else if RES.Header.decoder == nil {
 		RES.Http2Upgrade()
 	}
 
@@ -422,74 +419,45 @@ func (c *Client) Http2ReadRespone(RES *ResponseType, ID uint32) error {
 	RES.Header.thebuffer.Reset()
 
 	data := make([]byte, 4)
-	binary.BigEndian.PutUint32(data, ID)
+	binary.BigEndian.PutUint32(data, StreamID)
 
 	indexRaw := bytes.Index(c.theBuffer.B, data) - 5
 	for indexRaw > -1 {
 		payloadLength := int(binary.BigEndian.Uint32(append([]byte{0}, c.theBuffer.B[indexRaw:indexRaw+3]...))) + 9 + indexRaw
-		if payloadLength > c.theBuffer.Len() {
-			fmt.Println("<<<")
-			os.Exit(1)
-		}
-
-		// raw := c.theBuffer.B[indexRaw:payloadLength]
 
 		switch c.theBuffer.B[indexRaw+3] {
 		case 0x0:
-			// fmt.Println("stream id:", ID)
-			// fmt.Println("len body from index:", len(raw[9:payloadLength]))
-			// RES.Header.thebuffer.Write(raw[9 : payloadLength-9])
 			RES.Header.thebuffer.Write(c.theBuffer.B[indexRaw+9 : payloadLength])
 		case 0x1:
-			// fmt.Println("stream id:", ID)
-			// fmt.Println("len headers from index:", len(raw[9:payloadLength]))
-			// RES.Header.decoder.Write(raw[9 : payloadLength-9])
 			RES.Header.decoder.Write(c.theBuffer.B[indexRaw+9 : payloadLength])
+		case 0x3:
+			c.run = false
+			c.theBuffer.B = append(c.theBuffer.B[:indexRaw], c.theBuffer.B[payloadLength:]...)
+			return &RegnError{"the stream id has been canceled by the server"}
 		}
 
 		if c.theBuffer.B[indexRaw+4]&0x1 != 0 {
 			c.run = false
 		}
-		// fmt.Println("len:", c.theBuffer.Len())
 		c.theBuffer.B = append(c.theBuffer.B[:indexRaw], c.theBuffer.B[payloadLength:]...)
 		indexRaw = bytes.Index(c.theBuffer.B, data) - 5
 	}
 
-	// done without any problem
 	for c.run {
-		if _, err := c.peeker.Peek(9); err != nil {
-			return &RegnError{Message: "timeout error"}
+		if _, err := c.peeker.Peek(1); err != nil {
+			c.Close()
+			return err
 		}
-
 		buffred := c.peeker.Buffered()
+		raw, _ := c.peeker.Peek(buffred)
 
-		if buffred == 0 {
-			c.Close()
-			return &RegnError{Message: "timeout error"}
-		}
-
-		raw, err := c.peeker.Peek(buffred)
-		if err != nil {
-			c.Close()
-			return &RegnError{Message: "timeout error"}
-		}
-
-		StreamId := binary.BigEndian.Uint32(raw[5:9]) & 0x7FFFFFFF
 		payloadLength := int(binary.BigEndian.Uint32(append([]byte{0}, raw[0:3]...))) + 9
 		c.peeker.Discard(payloadLength)
 
-		// if payloadLength == len(raw) {
-		// 	fmt.Println("==")
-		// } else {
-		// 	fmt.Println("len raw:", len(raw))
-		// 	fmt.Println("payload legnth:", payloadLength)
-		// }
-
 		switch raw[3] {
 		case 0x0:
-			// fmt.Println("stream id:", StreamId)
-			// fmt.Println("len body from peek:", len(raw[9:payloadLength]))
-			if StreamId != ID {
+			Stream := binary.BigEndian.Uint32(raw[5:9]) & 0x7FFFFFFF
+			if Stream != StreamID {
 				c.theBuffer.Write(raw[:payloadLength])
 				continue
 			}
@@ -499,11 +467,10 @@ func (c *Client) Http2ReadRespone(RES *ResponseType, ID uint32) error {
 			if raw[4]&0x1 != 0 {
 				c.run = false
 			}
-
 		case 0x1:
-			// fmt.Println("stream id:", ID)
-			// fmt.Println("len headers from peek:", len(raw[9:payloadLength]))
-			if StreamId != ID {
+			Stream := binary.BigEndian.Uint32(raw[5:9]) & 0x7FFFFFFF
+
+			if Stream != StreamID {
 				c.theBuffer.Write(raw[:payloadLength])
 				continue
 			}
@@ -513,17 +480,33 @@ func (c *Client) Http2ReadRespone(RES *ResponseType, ID uint32) error {
 			if raw[4]&0x1 != 0 {
 				c.run = false
 			}
+		case 0x3:
+			Stream := binary.BigEndian.Uint32(raw[5:9]) & 0x7FFFFFFF
+			if Stream != StreamID {
+				c.theBuffer.Write(raw[:payloadLength])
+				continue
+			}
 
+			return &RegnError{"the stream id has been canceled by the server"}
+		case 0x4:
+			indexIds := bytes.IndexByte(raw, 0x03)
+			indexWin := bytes.IndexByte(raw, 0x5)
+
+			if indexIds == -1 || indexWin == -1 {
+				continue
+			}
+			c.h2MaxIds = binary.BigEndian.Uint32(raw[indexIds+1 : indexIds+5])
+			c.h2WinSize = binary.BigEndian.Uint32(raw[indexWin+1 : indexWin+5])
 		case 0x7:
 			c.Close()
 			return &RegnError{Message: "the connection has been closed by the server 'http2.GoAwayFrame'"}
-		case 0x3:
-			fmt.Println("from RST")
-		case 0x4:
-			fmt.Println("from settings")
 		case 0x8:
-			fmt.Println("window update")
-
+			c.flusher.Write([]byte{0x00, 0x00, 0x04})
+			c.flusher.WriteByte(0x8)
+			c.flusher.WriteByte(0x00)
+			binary.Write(c.flusher, binary.BigEndian, uint32(0x0))
+			binary.Write(c.flusher, binary.BigEndian, uint32(c.h2WinSize))
+			c.flusher.Flush()
 		}
 	}
 
@@ -532,7 +515,7 @@ func (c *Client) Http2ReadRespone(RES *ResponseType, ID uint32) error {
 
 func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 	if c.upgraded {
-		id := c.Http2GenId()
+		id := c.h2GenStreamId()
 		if err := c.Http2SendRequest(REQ, id); err != nil {
 			return err
 		}
@@ -565,22 +548,21 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 	c.flusher.Write(REQ.Header.raw.B)
 	if err := c.flusher.Flush(); err != nil {
 		c.Close()
-		return &RegnError{Message: "field send request"}
+		return err
 	}
 
 	RES.Header.thebuffer.Reset()
 	for {
-		c.peeker.Peek(1)
-		le := c.peeker.Buffered()
-		if le == 0 {
+		if _, err := c.peeker.Peek(1); err != nil {
 			c.Close()
-			return &RegnError{Message: "read timeout"}
+			return err
 		}
+		le := c.peeker.Buffered()
+		raw, _ := c.peeker.Peek(le)
 
-		peeked, _ := c.peeker.Peek(le)
 		c.peeker.Discard(le)
-		RES.Header.thebuffer.Write(peeked)
-		peeked = nil
+		RES.Header.thebuffer.Write(raw)
+		raw = nil
 
 		if bytes.Contains(RES.Header.thebuffer.B, lines[1:]) {
 			contentLengthMatch := lenRegex.FindSubmatch(RES.Header.thebuffer.B)

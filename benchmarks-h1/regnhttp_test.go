@@ -20,7 +20,7 @@ func BenchmarkRegnhttp(b *testing.B) {
 	c := &regn.Client{TlsConfig: &tls.Config{InsecureSkipVerify: true}}
 	defer c.Close()
 
-	request.SetURL("https://nghttp2.org/httpbin/post")
+	request.SetURL("https://localhost")
 	request.SetMethod(regn.MethodPost)
 
 	c.Http2Upgrade()
@@ -28,16 +28,14 @@ func BenchmarkRegnhttp(b *testing.B) {
 
 	b.StartTimer()
 
-	for xo := 1; xo != int(c.Http2MaxIds); xo++ {
-		fmt.Println("Done:", Corrects, "Error:", Errors)
+	for xo := 1; xo < RequestsNumber*2-2; xo += 2 {
 		request.SetBodyString("number=" + strconv.Itoa(xo))
 		if err := c.Http2SendRequest(request, uint32(xo)); err != nil {
 			panic("error:" + err.Error())
 		}
 	}
 
-	for xo := 1; xo != int(c.Http2MaxIds); xo++ {
-		fmt.Println("Done:", Corrects, "Error:", Errors)
+	for xo := 1; xo < RequestsNumber*2-2; xo += 2 {
 		if err := c.Http2ReadRespone(response, uint32(xo)); err != nil {
 			Errors++
 		} else if strings.Contains(response.BodyString(), "number="+strconv.Itoa(xo)) {

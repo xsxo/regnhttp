@@ -31,6 +31,10 @@ func main() {
 		MaxConcurrentStreams: 5000000,
 	}
 
+	// customSettings := http2.Setting{
+	// 	InitialWindowSize: 100000, // Set the initial window size
+	// }
+
 	server := &http.Server{
 		Addr: ":443",
 		TLSConfig: &tls.Config{
