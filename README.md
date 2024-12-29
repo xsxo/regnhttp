@@ -1,28 +1,27 @@
 ## REGN HTTP - Alpha Version
 RegnHTTP is a lightweight Packge designed solely for Maximum Performance GoLang</br>
 
-## REGN HTTP Might not for you
-RegnHTTP it may lack many features, but this is intentional, REGN HTTP excludes them to maintain a lightweight codebase & maximum performance.
-</br>
-**Missing Features**
-- Streaming Requests
-- Redirects Requests
-- Pool Connection (you can create one by yourself using sync.Pool)
+## REGN HTTP Faster than net/http
+The regnhttp library focuses on leveraging all the features of `HTTP/2` and `HTTP/3` that are not available in net/http to achieve high performance</br>
+`net/http` uses a transport layer to switch between different HTTP versions, meaning you won't notice any difference when switching between versions in `net/http`.
+#### Missing feauters of HTTP/2 & HTTP/3 in `net/http`
+- Send & Read Multi Requests in same connection
+- Read the response later after Send the Request
+- Header Compression used Hpack & Qpack
+- Support HTTP/2 & HTTP/3 Directly (Without Tansport)
+
+net/http uses a `transport` layer to handle the transition between different HTTP versions (creating a layer that converts requests from HTTP/1.1 to other versions). This means that, essentially, you are using multiple HTTP versions to send a request, leading to greater resource consumption and not fully leveraging the advantages of newer HTTP versions.
 
 ## Features
 - `Connect` Function (create connection with server before send requests)
-- Auto Reconnecting when The Server Disconnect
+- Reuse Request & Response object instead of creating a new one
 - Reducing pressure on The Garbage Collector
-- Bulit sync.Pool to Avoid Duplicating vars
-- Support HTTP/2, HTTP/3 (Soon...)
-- Mulit Requests on One Connection (soon...)
-- Send Headers One Time, The next requsts has body without headers (soon...)
-- No Thread Race | No Lose Data
-- Built-in Socket Proxy Connection
-- Used Proxy Directly without tansport
-- Used HTTP/2, HTTP/3 Directly without tansport (soon...)
-- Support tansport (soon...)
-
-## How To Use RegnHTTP
-- insatll the package: `go install github.com/xsxo/regnhttp@latest`
-- Take a lock at The Examples folder: [Examples](https://github.com/xsxo/regnhttp/tree/master/examples)
+- Bulit in sync.Pool to Avoid Duplicating vars
+- No Thread Race | No Data Lose
+- Mulit Requests on Same Connection
+- Read the response later after Send the Request
+- Header Compression used Hpack & Qpack
+- Support Proxy Directly (Without Tansport)
+- Support HTTP/2 Directly (Without Tansport)
+- Support HTTP/3 Directly (Without Tansport) (soon...)
+- Support Tansport (soon...)

@@ -1,6 +1,7 @@
 package benchmark
 
 import (
+	"crypto/tls"
 	"strconv"
 	"strings"
 	"testing"
@@ -14,10 +15,10 @@ func BenchmarkFasthttp(b *testing.B) {
 	request := fasthttp.AcquireRequest()
 	response := fasthttp.AcquireResponse()
 
-	request.SetRequestURI("http://localhost")
+	request.SetRequestURI("https://localhost")
 	request.Header.SetMethod(fasthttp.MethodPost)
 
-	c := &fasthttp.Client{}
+	c := &fasthttp.Client{TLSConfig: &tls.Config{InsecureSkipVerify: true}}
 
 	b.StartTimer()
 	for Corrects != RequestsNumber && Errors != RequestsNumber {

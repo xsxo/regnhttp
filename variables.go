@@ -2,7 +2,7 @@ package regn
 
 import (
 	"bufio"
-	"net"
+	"io"
 	"regexp"
 	"sync"
 
@@ -40,26 +40,26 @@ func (e *RegnError) Error() string {
 	return "regnhttp error: " + e.Message
 }
 
-func genPeeker(Conn net.Conn) *bufio.Reader {
+func genPeeker(reader io.Reader) *bufio.Reader {
 	nr := peekerPool.Get()
 
 	if nr == nil {
-		return bufio.NewReader(Conn)
+		return bufio.NewReader(reader)
 	}
 
 	nrr, _ := nr.(*bufio.Reader)
-	nrr.Reset(Conn)
+	nrr.Reset(reader)
 	return nrr
 }
 
-func genFlusher(Conn net.Conn) *bufio.Writer {
+func genFlusher(writer io.Writer) *bufio.Writer {
 	nw := flusherPool.Get()
 
 	if nw == nil {
-		return bufio.NewWriter(Conn)
+		return bufio.NewWriter(writer)
 	}
 
 	nww, _ := nw.(*bufio.Writer)
-	nww.Reset(Conn)
+	nww.Reset(writer)
 	return nww
 }
