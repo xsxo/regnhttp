@@ -17,17 +17,36 @@ jobs:
       with:
         go-version: '1.23.3'
 
-    - name: Install Packages
+    - name: mod tidy main
       run: go mod tidy
+
+    - name: mod tidy benchmarks
+      run: |
+        cd benchmark
+        go mod tidy
+        cd ..
 
     - name: Build
       run: go build -v ./...
 
-    - name: Run H2 Server
+    - name: Start H2 Server
       run: |
         cd servers-h2
         nohup go run server.go & echo $! > server_pid.txt
         cd ..
+
+    - name: Start REGN Benchmark
+      run: | 
+        cd benchmark-regnhttp
+        go test -bench=BenchmarkRegnhttp -benchtime=1x
+        c ..
+
+    - name: Start net/http & fasthttp benchmark
+      run: | 
+        cd benchmark
+        go test -bench=BenchmarkFasthttp -benchtime=1x
+        go test -bench=BenchmarkNethttp -benchtime=1x
+        c ..
 
     - name: Test
       run: go test -v ./...

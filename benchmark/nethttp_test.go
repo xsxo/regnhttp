@@ -15,7 +15,7 @@ import (
 func BenchmarkNethttp(b *testing.B) {
 	b.StopTimer()
 
-	request, _ := http.NewRequest("POST", "https://localhost", nil)
+	request, _ := http.NewRequest("POST", "https://localhost:9911", nil)
 
 	tr := &http2.Transport{
 		TLSClientConfig: &tls.Config{
