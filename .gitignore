@@ -1,5 +1,2 @@
 vendor/
-benchmarks/
 spical_test/
-benchmarks-h2/
-server-h2/
