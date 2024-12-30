@@ -44,7 +44,6 @@ func BenchmarkRegnhttp(b *testing.B) {
 
 	for xo := 1; xo != RequestsNumber; xo += 2 {
 		if err := c.Http2ReadRespone(response, uint32(xo)); err != nil {
-			panic(err.Error())
 			Errors++
 		} else if strings.Contains(response.BodyString(), "id="+strconv.Itoa(xo)) {
 			Corrects++
