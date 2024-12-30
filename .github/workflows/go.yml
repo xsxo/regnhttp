@@ -7,7 +7,6 @@ on:
     branches: [ "main" ]
 
 jobs:
-
   build:
     runs-on: ubuntu-latest
     steps:
@@ -21,24 +20,21 @@ jobs:
     - name: Install Packages
       run: go mod tidy
 
-    - name: run server h2 server
-      run: |
-        cd servers-h2
-        go run "server.go" &
-        echo $! > server_pid.txt
-        cd ..
-
     - name: Build
       run: go build -v ./...
+
+    - name: Run H2 Server
+      run: |
+        cd servers-h2
+        nohup go run server.go & echo $! > server_pid.txt
+        cd ..
 
     - name: Test
       run: go test -v ./...
 
-    - name: kill server
+    - name: Kill Server
       run: |
-        cd servers-h2
-        kill $(cat server_pid.txt) 
-        rm server_pid.txt
-        cd ..
-
-
+        if [ -f servers-h2/server_pid.txt ]; then
+          kill $(cat servers-h2/server_pid.txt) 
+          rm servers-h2/server_pid.txt
+        fi
