@@ -24,7 +24,7 @@ func BenchmarkRegnhttp(b *testing.B) {
 	c := regn.Client{TLSConfig: &tls.Config{InsecureSkipVerify: true}}
 	defer c.Close()
 
-	request.SetURL("https://localhost:443")
+	request.SetURL("https://localhost:9911")
 	request.SetMethod(regn.MethodPost)
 
 	c.Http2Upgrade()

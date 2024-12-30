@@ -8,7 +8,7 @@ import (
 func TestConnectFunction(T *testing.T) {
 	req := Request()
 	req.SetMethod("GET")
-	req.SetURL("https://localhost/")
+	req.SetURL("https://localhost:9911/")
 
 	clt := Client{
 		Timeout:     10,

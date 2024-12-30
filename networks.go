@@ -266,10 +266,15 @@ func (c *Client) Connect(REQ *RequestType) error {
 				c.Close()
 				return err
 			}
+
+			if REQ.Header.mytls {
+				c.connection = tls.Client(c.connection, c.TLSConfig)
+				c.createLines()
+			}
 		}
 
 		if c.upgraded {
-			if REQ.Header.myport != "443" {
+			if REQ.Header.myport != "443" && !REQ.Header.mytls {
 				c.Close()
 				panic("http2 protocol support https requests only; use https://")
 			}

@@ -14,6 +14,7 @@ import (
 type ConnectionInformation struct {
 	myport       string
 	myhost       string
+	mytls        bool
 	hpackHeaders []hpack.HeaderField
 	hpackEncoder *hpack.Encoder
 	rawBody      bytebufferpool.ByteBuffer
@@ -181,10 +182,17 @@ func (REQ *RequestType) SetURL(Url string) {
 
 	if Parse.Port() != "" {
 		REQ.Header.myport = Parse.Port()
+		if Parse.Scheme == "https" {
+			REQ.Header.mytls = true
+		} else {
+			REQ.Header.mytls = false
+		}
 	} else if Parse.Scheme == "https" {
 		REQ.Header.myport = "443"
+		REQ.Header.mytls = false
 	} else {
 		REQ.Header.myport = "80"
+		REQ.Header.mytls = false
 	}
 
 	if Parse.Hostname() == "" {
