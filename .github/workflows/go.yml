@@ -21,9 +21,9 @@ jobs:
     - name: Install Packages
       run: go mod tidy
 
-    - name: run server golang
+    - name: run server h2 server
       run: |
-        go run "servers/server_golang.go" &
+        go run "servers-h2/server.go" &
         echo $! > server_pid.txt
 
     - name: Build
