@@ -23,8 +23,10 @@ jobs:
 
     - name: run server h2 server
       run: |
-        go run "servers-h2/server.go" &
+        cd servers-h2
+        go run "server.go" &
         echo $! > server_pid.txt
+        cd ..
 
     - name: Build
       run: go build -v ./...
@@ -34,7 +36,9 @@ jobs:
 
     - name: kill server
       run: |
+        cd servers-h2
         kill $(cat server_pid.txt) 
         rm server_pid.txt
+        cd ..
 
 

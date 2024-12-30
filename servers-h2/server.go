@@ -47,7 +47,7 @@ func main() {
 
 	http2.ConfigureServer(server, http2Server)
 
-	fmt.Println("Starting HTTPS server on https://localhost:443")
+	fmt.Println("Starting HTTPS server on https://localhost")
 	err := server.ListenAndServeTLS("server.crt", "server.key")
 	if err != nil {
 		fmt.Printf("Failed to start server: %v\n", err)
