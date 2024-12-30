@@ -46,7 +46,7 @@ jobs:
         cd benchmark
         go test -bench=BenchmarkFasthttp -benchtime=1x
         go test -bench=BenchmarkNethttp -benchtime=1x
-        c ..
+        cd ..
 
     - name: Test
       run: go test -v ./...
