@@ -1,15 +1,19 @@
 package regn
 
-import "testing"
+import (
+	"crypto/tls"
+	"testing"
+)
 
 func TestConnectFunction(T *testing.T) {
 	req := Request()
 	req.SetMethod("GET")
-	req.SetURL("http://localhost:9911")
+	req.SetURL("https://localhost")
 
 	clt := Client{
 		Timeout:     10,
 		TimeoutRead: 10,
+		TLSConfig:   &tls.Config{InsecureSkipVerify: true},
 	}
 
 	if err := clt.Connect(req); err != nil {

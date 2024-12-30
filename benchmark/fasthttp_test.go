@@ -2,6 +2,7 @@ package benchmark
 
 import (
 	"crypto/tls"
+	"fmt"
 	"strconv"
 	"strings"
 	"testing"
@@ -33,6 +34,7 @@ func BenchmarkFasthttp(b *testing.B) {
 		}
 	}
 
+	fmt.Println("Corrects:", Corrects, "; Errors:", Errors)
 	fasthttp.ReleaseRequest(request)
 	fasthttp.ReleaseResponse(response)
 	c.CloseIdleConnections()

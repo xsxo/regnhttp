@@ -22,7 +22,7 @@ type Client struct {
 	TimeoutRead int
 
 	// Tls Context
-	TlsConfig *tls.Config
+	TLSConfig *tls.Config
 
 	// Dialer to create dial connection
 	Dialer *net.Dialer
@@ -96,7 +96,7 @@ func (c *Client) connectNet(host string, port string) error {
 	if port != "443" {
 		c.connection, err = c.Dialer.Dial("tcp", host+":"+port)
 	} else {
-		c.connection, err = tls.DialWithDialer(c.Dialer, "tcp4", host+":"+port, c.TlsConfig)
+		c.connection, err = tls.DialWithDialer(c.Dialer, "tcp4", host+":"+port, c.TLSConfig)
 	}
 
 	if err != nil {
@@ -228,9 +228,9 @@ func (c *Client) Connect(REQ *RequestType) error {
 		c.Close()
 	}
 
-	if c.TlsConfig == nil {
-		c.TlsConfig = &tls.Config{}
-		c.TlsConfig.InsecureSkipVerify = false
+	if c.TLSConfig == nil {
+		c.TLSConfig = &tls.Config{}
+		c.TLSConfig.InsecureSkipVerify = false
 	}
 
 	if c.run {
@@ -239,10 +239,10 @@ func (c *Client) Connect(REQ *RequestType) error {
 	}
 
 	if c.hostConnected == "" {
-		c.TlsConfig.ServerName = REQ.Header.myhost
+		c.TLSConfig.ServerName = REQ.Header.myhost
 
 		if c.upgraded {
-			c.TlsConfig.NextProtos = []string{"h2"}
+			c.TLSConfig.NextProtos = []string{"h2"}
 		}
 
 		if c.useProxy {
@@ -257,7 +257,7 @@ func (c *Client) Connect(REQ *RequestType) error {
 			}
 
 			if REQ.Header.myport == "443" {
-				c.connection = tls.Client(c.connection, c.TlsConfig)
+				c.connection = tls.Client(c.connection, c.TLSConfig)
 				c.createLines()
 			}
 

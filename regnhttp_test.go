@@ -1,4 +1,4 @@
-package benchmark
+package regn
 
 import (
 	"crypto/tls"
@@ -6,32 +6,36 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-
-	regn "github.com/xsxo/regnhttp"
 )
+
+var RequestsNumber int = 100 // 17773
+var Errors int
+var Corrects int
 
 func BenchmarkRegnhttp(b *testing.B) {
 	b.StopTimer()
-	request := regn.Http2Request()
+	request := Http2Request()
 	defer request.Close()
-	response := regn.Http2Response()
+	response := Http2Response()
 	defer response.Close()
 
-	c := &regn.Client{TlsConfig: &tls.Config{InsecureSkipVerify: true}}
+	c := Client{TLSConfig: &tls.Config{InsecureSkipVerify: true}}
 	defer c.Close()
 
-	request.SetURL("https://localhost")
-	request.SetMethod(regn.MethodPost)
+	request.SetURL("https://localhost:443")
+	request.SetMethod(MethodPost)
 
 	c.Http2Upgrade()
-	c.Connect(request)
+	if err := c.Connect(request); err != nil {
+		panic(err)
+	}
 
 	b.StartTimer()
 
 	for xo := 1; xo < RequestsNumber*2-2; xo += 2 {
 		request.SetBodyString("number=" + strconv.Itoa(xo))
 		if err := c.Http2SendRequest(request, uint32(xo)); err != nil {
-			panic("error:" + err.Error())
+			panic(err.Error())
 		}
 	}
 
@@ -45,7 +49,7 @@ func BenchmarkRegnhttp(b *testing.B) {
 		}
 	}
 
-	fmt.Println("Done:", Corrects, "Error:", Errors)
+	fmt.Println("Corrects:", Corrects, "; Errors:", Errors)
 	request.Close()
 	response.Close()
 	c.Close()

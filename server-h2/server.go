@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"time"
 
 	"golang.org/x/net/http2"
 )
@@ -22,6 +23,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 
 	w.Write(body)
+	time.Sleep(2 * time.Millisecond) // simple processing
 }
 
 func main() {
