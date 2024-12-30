@@ -344,7 +344,7 @@ func (c *Client) Http2SendRequest(REQ *RequestType, StreamID uint32) error {
 	} else if c.h2streams == 0 {
 		return &RegnError{"concurrent streams id"}
 	} else if c.h2winserver < payloadLengthBody {
-		return &RegnError{"the window is full try to read any response to upper the window"}
+		return &RegnError{"data > window server size"}
 	}
 
 	c.run = true
@@ -457,7 +457,7 @@ func (c *Client) Http2ReadRespone(RES *ResponseType, StreamID uint32) error {
 		buffred := c.peeker.Buffered()
 		if buffred < 8 {
 			c.Close()
-			return &RegnError{Message: "PROTOCOL_ERROR"}
+			return &RegnError{Message: "PROTOCOL_ERROR: Response Legnth < 8"}
 		}
 
 		raw, _ := c.peeker.Peek(buffred)
@@ -465,7 +465,7 @@ func (c *Client) Http2ReadRespone(RES *ResponseType, StreamID uint32) error {
 		payloadLength := int(binary.BigEndian.Uint32(append([]byte{0}, raw[0:3]...))) + 9
 		if payloadLength > buffred {
 			c.Close()
-			return &RegnError{Message: "PROTOCOL_ERROR"}
+			return &RegnError{Message: "PROTOCOL_ERROR: Payload Legnth > Response Legnth"}
 		}
 		c.peeker.Discard(payloadLength)
 

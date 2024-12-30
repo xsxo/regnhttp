@@ -10,7 +10,7 @@ import (
 	regn "github.com/xsxo/regnhttp"
 )
 
-var RequestsNumber int = 100 // 17773
+var RequestsNumber int = 17773
 var Errors int
 var Corrects int
 
@@ -34,19 +34,22 @@ func BenchmarkRegnhttp(b *testing.B) {
 
 	b.StartTimer()
 
-	for xo := 1; xo < RequestsNumber*2-2; xo += 2 {
-		request.SetBodyString("number=" + strconv.Itoa(xo))
+	for xo := 1; xo != RequestsNumber; xo += 2 {
+		request.SetBodyString("id=" + strconv.Itoa(xo))
 		if err := c.Http2SendRequest(request, uint32(xo)); err != nil {
+			fmt.Println(xo)
 			panic(err.Error())
 		}
 	}
 
-	for xo := 1; xo < RequestsNumber*2-2; xo += 2 {
+	for xo := 1; xo != RequestsNumber; xo += 2 {
 		if err := c.Http2ReadRespone(response, uint32(xo)); err != nil {
+			panic(err.Error())
 			Errors++
-		} else if strings.Contains(response.BodyString(), "number="+strconv.Itoa(xo)) {
+		} else if strings.Contains(response.BodyString(), "id="+strconv.Itoa(xo)) {
 			Corrects++
 		} else {
+			fmt.Println("!=")
 			Errors++
 		}
 	}
