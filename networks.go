@@ -111,7 +111,7 @@ func (c *Client) connectNet(host string, port string) error {
 func (c *Client) connectHost(address string) error {
 	therequest := bufferPool.Get()
 	therequest.Reset()
-	therequest.WriteString("CONNECT " + address + " HTTP/1.1\r\nHost: " + address + "\r\nConnection: keep-Alive")
+	therequest.WriteString("CONNECT " + address + " HTTP/1.1\r\nHost: " + address + "\r\nConnection: Keep-Alive")
 
 	if c.authorization != "" {
 		therequest.WriteString("Authorization: " + c.authorization)
@@ -130,21 +130,18 @@ func (c *Client) connectHost(address string) error {
 	therequest.Reset()
 	bufferPool.Put(therequest)
 
-	buffer := make([]byte, 4096)
-	if _, err := c.peeker.Read(buffer); err != nil {
-		c.Close()
+	if raw, err := c.peeker.Peek(20); err != nil {
 		return &RegnError{Message: "field proxy connection with '" + address + "' address"}
+	} else {
+		readed := statusRegex.FindSubmatch(raw)
+		if len(readed) <= 0 {
+			c.Close()
+			return &RegnError{Message: "field proxy connection with '" + address + "' address"}
+		}
+		readed[0] = nil
+		c.peeker.Discard(c.peeker.Buffered())
 	}
 
-	readed := statusRegex.FindSubmatch(buffer)
-	buffer = nil
-
-	if len(readed) == 0 {
-		c.Close()
-		return &RegnError{Message: "field proxy connection with '" + address + "' address"}
-	}
-
-	readed[0] = nil
 	return nil
 }
 
@@ -219,8 +216,18 @@ func (c *Client) closeLines() {
 
 func (c *Client) createLines() {
 	c.closeLines()
-	c.peeker = genPeeker(c.connection)
-	c.flusher = genFlusher(c.connection)
+
+	if new, ok := c.connection.(*tls.Conn); ok {
+		if new != nil {
+			c.peeker = genPeeker(new)
+			c.flusher = genFlusher(new)
+		}
+	} else {
+		if c.connection != nil {
+			c.peeker = genPeeker(c.connection)
+			c.flusher = genFlusher(c.connection)
+		}
+	}
 }
 
 func (c *Client) Connect(REQ *RequestType) error {
@@ -256,7 +263,7 @@ func (c *Client) Connect(REQ *RequestType) error {
 				return err
 			}
 
-			if REQ.Header.myport == "443" {
+			if REQ.Header.myport == "443" || REQ.Header.mytls {
 				c.connection = tls.Client(c.connection, c.TLSConfig)
 				c.createLines()
 			}
@@ -463,7 +470,7 @@ func (c *Client) Http2ReadRespone(RES *ResponseType, StreamID uint32) error {
 		raw, _ := c.peeker.Peek(buffred)
 
 		payloadLength := int(binary.BigEndian.Uint32(append([]byte{0}, raw[0:3]...))) + 9
-		if payloadLength > buffred {
+		if payloadLength > len(raw) {
 			c.Close()
 			return &RegnError{Message: "PROTOCOL_ERROR: Payload Legnth > Response Legnth"}
 		}
@@ -576,7 +583,11 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 		RES.HttpDowngrade()
 	}
 
-	c.flusher.Write(REQ.Header.raw.B)
+	if _, err := c.flusher.Write(REQ.Header.raw.B); err != nil {
+		c.Close()
+		return err
+	}
+
 	if err := c.flusher.Flush(); err != nil {
 		c.Close()
 		return err

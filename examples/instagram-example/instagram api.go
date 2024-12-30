@@ -32,7 +32,7 @@ func main() {
 	cn.Timeout = 40
 
 	// set proxy (not required)
-	proxy := "localhost:9911"
+	proxy := "127.0.0.1:9911"
 	cn.Proxy("http://" + proxy)
 
 	// create connection with the server before send the request's (not required)
@@ -49,7 +49,7 @@ func main() {
 
 		// send the request + check response
 		if err := cn.Do(req, res); err != nil {
-			fmt.Println("Error:", err.Error())
+			fmt.Println("Error Send:", err.Error())
 		} else {
 			if strings.Contains(res.BodyString(), `\"`+"TargetUsernameHere"+`\"`) {
 				fmt.Println("catch it")
