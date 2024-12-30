@@ -39,7 +39,7 @@ jobs:
       run: | 
         cd benchmark-regnhttp
         go test -bench=BenchmarkRegnhttp -benchtime=1x
-        c ..
+        cd ..
 
     - name: Start net/http & fasthttp benchmark
       run: | 
