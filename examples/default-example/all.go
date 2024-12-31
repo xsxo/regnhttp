@@ -22,18 +22,18 @@ func Example() {
 	// ex: clt.Proxy("http://username:password@localhost:9911")
 
 	// create request object
-	req := regn.Request()
+	req := regn.Http2Request()
 	defer req.Close()
 
 	// create response object
-	res := regn.Response()
+	res := regn.Http2Response()
 	defer res.Close()
 
 	// set meothod
 	req.SetMethod(regn.MethodPost)
 
 	// set url request + params
-	req.SetURL("http://httpbin.org/post?name=ndoshy")
+	req.SetURL("https://httpbin/post?name=ndoshy")
 
 	// set header
 	req.Header.Set("Authorization", "base64-code")

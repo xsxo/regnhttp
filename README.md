@@ -7,7 +7,7 @@ REGN HTTP pkg focuses on leveraging all the features of `HTTP/2` and `HTTP/3` th
 - Header Compression used Hpack & Qpack Algorithms
 - Support HTTP/2 & HTTP/3 Directly (Without Tansport)
 
-net/http uses a `transport` layer to handle the transition between different HTTP versions (creating a layer that converts requests from HTTP/1.1 to other versions). This means that, essentially, you are using multiple HTTP versions to send a request, leading to greater resource consumption and not fully leveraging the advantages of newer HTTP versions.
+net/http uses a `transport layer` to handle the transition between different HTTP versions (creating a layer that converts requests from HTTP/1.1 to other versions). This means that, essentially, you are using multiple HTTP versions to send a request, leading to greater resource consumption and not fully leveraging the advantages of newer HTTP versions.
 
 ## Benchmarks multi streams
 regn client:

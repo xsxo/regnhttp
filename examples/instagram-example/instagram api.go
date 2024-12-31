@@ -18,7 +18,7 @@ func main() {
 	req.SetMethod(regn.MethodPost)
 
 	// set api url of request
-	req.SetURL("https://i.instagram.com/api/v1/bloks/apps/com.bloks.www.fxim.settings.username.change.async/")
+	req.SetURL("http://i.instagram.com/api/v1/bloks/apps/com.bloks.www.fxim.settings.username.change.async/")
 
 	// set headers of request
 	req.Header.Set("User-Agent", "Instagram 309.1.0.41.113 Android (28/9; 240dpi; 720x1280; OnePlus; A5010; A5010; intel; en_US; 541635897)")
