@@ -10,3 +10,7 @@
 - Fix window update frames http2
 - Update reader function http2
 - Fix proxy "http://" protocol
+
+# v1.3.0 (25/1/1)
+- Fix End stream http2
+- Fix Payload legnth

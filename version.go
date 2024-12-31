@@ -1,7 +1,7 @@
 package regn
 
 const (
-	Version     string = "v1.2.0"
+	Version     string = "v1.3.0"
 	Name        string = "REGN HTTP"
 	Author      string = "@xsxo GITHUB"
 	License     string = "Apache-2.0"

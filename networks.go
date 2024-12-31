@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/binary"
+	"fmt"
 	"net"
 	"net/url"
 	"strconv"
@@ -488,6 +489,7 @@ func (c *Client) Http2ReadRespone(RES *ResponseType, StreamID uint32) error {
 			}
 
 			if payloadLength > c.theBuffer.Len() {
+				fmt.Println("<<")
 				break
 			}
 
@@ -508,9 +510,7 @@ func (c *Client) Http2ReadRespone(RES *ResponseType, StreamID uint32) error {
 				return &RegnError{"the stream id " + strconv.Itoa(int(StreamID)) + " has been canceled by the server"}
 			}
 
-			if c.theBuffer.B[indexRaw+4]&0x1 != 0 {
-				c.run = false
-			} else if RES.Header.contectLegnth == RES.Header.thebuffer.Len() {
+			if c.theBuffer.B[indexRaw+4] == 0x0 {
 				c.run = false
 			}
 
