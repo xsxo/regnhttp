@@ -6,7 +6,6 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/binary"
-	"fmt"
 	"net"
 	"net/url"
 	"strconv"
@@ -489,7 +488,6 @@ func (c *Client) Http2ReadRespone(RES *ResponseType, StreamID uint32) error {
 			}
 
 			if payloadLength > c.theBuffer.Len() {
-				fmt.Println("<<")
 				break
 			}
 
