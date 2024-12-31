@@ -508,7 +508,7 @@ func (c *Client) Http2ReadRespone(RES *ResponseType, StreamID uint32) error {
 				return &RegnError{"the stream id " + strconv.Itoa(int(StreamID)) + " has been canceled by the server"}
 			}
 
-			if c.theBuffer.B[indexRaw+4] == 0x0 {
+			if c.theBuffer.B[indexRaw+4] == 0x1 || c.theBuffer.B[indexRaw+4] == 0x0 {
 				c.run = false
 			}
 
