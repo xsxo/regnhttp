@@ -451,7 +451,7 @@ func (c *Client) Http2ReadRespone(RES *ResponseType, StreamID uint32) error {
 	}
 
 	c.run = true
-	RES.Header.contectLegnth = -1
+	// RES.Header.contectLegnth = -1
 	RES.Header.thebuffer.Reset()
 
 	data := make([]byte, 4)
@@ -474,30 +474,32 @@ func (c *Client) Http2ReadRespone(RES *ResponseType, StreamID uint32) error {
 				RES.Header.decoder.Write(c.theBuffer.B[indexRaw+9 : payloadLength])
 			case 0x3:
 				c.run = false
-				c.h2Streams++
 				c.theBuffer.B = append(c.theBuffer.B[:indexRaw], c.theBuffer.B[payloadLength:]...)
 				return &RegnError{"the stream id " + strconv.Itoa(int(StreamID)) + " has been canceled by the server"}
 			}
 
 			if c.theBuffer.B[indexRaw+4] == 0x1 || c.theBuffer.B[indexRaw+4] == 0x0 {
+				if pending == 0 {
+					c.h2Streams++
+				}
+				c.theBuffer.B = append(c.theBuffer.B[:indexRaw], c.theBuffer.B[payloadLength:]...)
 				c.run = false
+				return nil
 			}
 
 			c.theBuffer.B = append(c.theBuffer.B[:indexRaw], c.theBuffer.B[payloadLength:]...)
 			indexRaw = bytes.Index(c.theBuffer.B, data) - 5
 		}
 
-		if !c.run {
-			break
-		} else if _, err := c.peeker.Peek(9); err != nil {
+		if _, err := c.peeker.Peek(9); err != nil {
 			c.Close()
 			return err
 		}
 
 		buffered := c.peeker.Buffered()
 		raw, _ := c.peeker.Peek(buffered)
-
 		payloadLength := int(binary.BigEndian.Uint32(append([]byte{0}, raw[0:3]...))) + 9
+
 		if payloadLength > len(raw) {
 			pending = payloadLength - len(raw)
 			c.theBuffer.Write(raw)
@@ -512,13 +514,15 @@ func (c *Client) Http2ReadRespone(RES *ResponseType, StreamID uint32) error {
 			} else {
 				c.peeker.Discard(pending)
 				c.theBuffer.Write(raw[:pending])
+				c.h2Streams++
 				pending = 0
 			}
 		}
 		c.peeker.Discard(payloadLength)
-		Stream := binary.BigEndian.Uint32(raw[5:9]) & 0x7FFFFFFF
+
 		switch raw[3] {
 		case 0x0:
+			Stream := binary.BigEndian.Uint32(raw[5:9]) & 0x7FFFFFFF
 			if payloadLength-9 >= int(c.h2WinClient) {
 				increment := 65535 - c.h2WinClient
 				c.flusher.Write([]byte{0x00, 0x00, 0x04})
@@ -532,60 +536,58 @@ func (c *Client) Http2ReadRespone(RES *ResponseType, StreamID uint32) error {
 				c.h2WinClient -= uint32(payloadLength - 9)
 			}
 
-			if StreamID != Stream || raw[4] != 0x1 || raw[4] != 0x0 {
+			if StreamID != Stream {
+				c.theBuffer.Write(raw[:payloadLength])
+				continue
+			} else if raw[4] != 0x1 && raw[4] != 0x0 {
 				c.h2Streams++
 				c.theBuffer.Write(raw[:payloadLength])
 				continue
 			}
 
-			RES.Header.thebuffer.Write(raw[:payloadLength])
+			RES.Header.thebuffer.Write(raw[9:payloadLength])
 
 			if raw[4] == 0x1 || raw[4] == 0x0 {
 				c.h2Streams++
 				c.run = false
 			}
 		case 0x1:
-			if StreamID != Stream || raw[4] != 0x4 {
+			Stream := binary.BigEndian.Uint32(raw[5:9]) & 0x7FFFFFFF
+			if StreamID != Stream {
+				c.h2Streams++
+				c.theBuffer.Write(raw[:payloadLength])
+				continue
+			} else if raw[4] != 0x4 && raw[4] != 0x1 && raw[4] != 0x0 {
 				c.h2Streams++
 				c.theBuffer.Write(raw[:payloadLength])
 				continue
 			}
-			RES.Header.decoder.Write(raw[indexRaw+9 : payloadLength])
+
+			RES.Header.decoder.Write(raw[9:payloadLength])
 
 			if raw[4] == 0x1 || raw[4] == 0x0 {
 				c.h2Streams++
 				c.run = false
 			}
 		case 0x3:
+			Stream := binary.BigEndian.Uint32(raw[5:9]) & 0x7FFFFFFF
 			if Stream != StreamID {
 				c.h2Streams++
 				c.theBuffer.Write(raw[:payloadLength])
 				continue
 			}
 			c.h2Streams++
-			return &RegnError{"the stream id " + strconv.Itoa(int(StreamID)) + " has been canceled by the server"}
-
-		case 0x4:
-			indexIds := bytes.IndexByte(raw, 0x03)
-			indexWin := bytes.IndexByte(raw, 0x5)
-
-			if indexIds == -1 || indexWin == -1 {
-				continue
-			}
-			c.h2Streams = binary.BigEndian.Uint32(raw[indexIds+1:indexIds+5]) - c.h2Streams
-			c.h2WinServer = binary.BigEndian.Uint32(raw[indexWin+1 : indexWin+5])
+			c.run = false
+			return &RegnError{"the stream id `" + strconv.Itoa(int(StreamID)) + "` has been canceled by the server"}
 		case 0x7:
 			c.Close()
 			return &RegnError{Message: "the connection has been closed by the server 'http2.GoAwayFrame'"}
 		case 0x8:
 			winsize := binary.BigEndian.Uint32(raw[9:13])
 			c.h2WinServer += winsize
-		default:
-			c.theBuffer.Write(raw)
 		}
 	}
 
-	c.h2Streams++
 	return nil
 }
 

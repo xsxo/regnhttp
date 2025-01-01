@@ -39,7 +39,7 @@ func BenchmarkRegnhttp(b *testing.B) {
 		if err := c.Http2SendRequest(request, uint32(xo)); err != nil {
 			panic(err.Error())
 		}
-		fmt.Println(xo)
+		// fmt.Println(xo)
 	}
 
 	for xo := 1; xo != RequestsNumber; xo += 2 {
