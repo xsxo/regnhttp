@@ -345,18 +345,6 @@ func (c *Client) Connect(REQ *RequestType) error {
 			c.flusher.WriteByte(0x0)                             // end stream (true)
 			binary.Write(c.flusher, binary.BigEndian, uint32(0)) // stream id (0)
 			c.flusher.Flush()
-
-			// c.flusher.Write([]byte{0x00, 0x00, 0x12})            // payloadlenght
-			// c.flusher.WriteByte(0x4)                             // settings frame
-			// c.flusher.WriteByte(0x0)                             // end stream (true)
-			// binary.Write(c.flusher, binary.BigEndian, uint32(0)) // stream id (0)
-			// c.flusher.Write([]byte{0x00, 0x03})                  // max streams
-			// binary.Write(c.flusher, binary.BigEndian, uint32(c.h2Streams))
-			// c.flusher.Write([]byte{0x00, 0x04}) // window size
-			// binary.Write(c.flusher, binary.BigEndian, uint32(c.h2WinClient))
-			// c.flusher.Write([]byte{0x00, 0x05}) // frame size
-			// binary.Write(c.flusher, binary.BigEndian, uint32(c.h2FrameSize))
-			// c.flusher.Flush()
 		}
 		c.hostConnected = REQ.Header.myhost
 	}
@@ -469,23 +457,11 @@ func (c *Client) Http2ReadRespone(RES *ResponseType, StreamID uint32) error {
 	data := make([]byte, 4)
 	binary.BigEndian.PutUint32(data, StreamID)
 
+	pending := 0
 	for c.run {
 		indexRaw := bytes.Index(c.theBuffer.B, data) - 5
 		for indexRaw > -1 {
 			payloadLength := int(binary.BigEndian.Uint32(append([]byte{0}, c.theBuffer.B[indexRaw:indexRaw+3]...))) + 9 + indexRaw
-
-			new := payloadLength - 9
-			new -= indexRaw
-			if c.theBuffer.B[indexRaw+3] == 0x0 && new >= int(c.h2WinClient) {
-				increment := 65535 - c.h2WinClient
-				c.flusher.Write([]byte{0x00, 0x00, 0x04})
-				c.flusher.WriteByte(0x8)
-				c.flusher.WriteByte(0x00)
-				binary.Write(c.flusher, binary.BigEndian, uint32(0))
-				binary.Write(c.flusher, binary.BigEndian, uint32(increment))
-				c.flusher.Flush()
-				c.h2WinClient += increment
-			}
 
 			if payloadLength > c.theBuffer.Len() {
 				break
@@ -494,11 +470,6 @@ func (c *Client) Http2ReadRespone(RES *ResponseType, StreamID uint32) error {
 			switch c.theBuffer.B[indexRaw+3] {
 			case 0x0:
 				RES.Header.thebuffer.Write(c.theBuffer.B[indexRaw+9 : payloadLength])
-
-				if uint32(RES.Header.thebuffer.Len()) <= c.h2WinClient {
-					c.h2WinClient -= uint32(RES.Header.thebuffer.Len())
-				}
-
 			case 0x1:
 				RES.Header.decoder.Write(c.theBuffer.B[indexRaw+9 : payloadLength])
 			case 0x3:
@@ -518,16 +489,82 @@ func (c *Client) Http2ReadRespone(RES *ResponseType, StreamID uint32) error {
 
 		if !c.run {
 			break
-		} else if _, err := c.peeker.Peek(3); err != nil {
+		} else if _, err := c.peeker.Peek(9); err != nil {
 			c.Close()
 			return err
 		}
 
 		buffered := c.peeker.Buffered()
 		raw, _ := c.peeker.Peek(buffered)
-		c.peeker.Discard(buffered)
 
+		payloadLength := int(binary.BigEndian.Uint32(append([]byte{0}, raw[0:3]...))) + 9
+		if payloadLength > len(raw) {
+			pending = payloadLength - len(raw)
+			c.theBuffer.Write(raw)
+			c.peeker.Discard(buffered)
+			continue
+		} else if pending != 0 {
+			if pending > len(raw) {
+				pending -= len(raw)
+				c.theBuffer.Write(raw)
+				c.peeker.Discard(buffered)
+				continue
+			} else {
+				c.peeker.Discard(pending)
+				c.theBuffer.Write(raw[:pending])
+				pending = 0
+			}
+		}
+		c.peeker.Discard(payloadLength)
+		Stream := binary.BigEndian.Uint32(raw[5:9]) & 0x7FFFFFFF
 		switch raw[3] {
+		case 0x0:
+			if payloadLength-9 >= int(c.h2WinClient) {
+				increment := 65535 - c.h2WinClient
+				c.flusher.Write([]byte{0x00, 0x00, 0x04})
+				c.flusher.WriteByte(0x8)
+				c.flusher.WriteByte(0x00)
+				binary.Write(c.flusher, binary.BigEndian, uint32(0))
+				binary.Write(c.flusher, binary.BigEndian, uint32(increment))
+				c.flusher.Flush()
+				c.h2WinClient += increment
+			} else {
+				c.h2WinClient -= uint32(payloadLength - 9)
+			}
+
+			if StreamID != Stream || raw[4] != 0x1 || raw[4] != 0x0 {
+				c.h2Streams++
+				c.theBuffer.Write(raw[:payloadLength])
+				continue
+			}
+
+			RES.Header.thebuffer.Write(raw[:payloadLength])
+
+			if raw[4] == 0x1 || raw[4] == 0x0 {
+				c.h2Streams++
+				c.run = false
+			}
+		case 0x1:
+			if StreamID != Stream || raw[4] != 0x4 {
+				c.h2Streams++
+				c.theBuffer.Write(raw[:payloadLength])
+				continue
+			}
+			RES.Header.decoder.Write(raw[indexRaw+9 : payloadLength])
+
+			if raw[4] == 0x1 || raw[4] == 0x0 {
+				c.h2Streams++
+				c.run = false
+			}
+		case 0x3:
+			if Stream != StreamID {
+				c.h2Streams++
+				c.theBuffer.Write(raw[:payloadLength])
+				continue
+			}
+			c.h2Streams++
+			return &RegnError{"the stream id " + strconv.Itoa(int(StreamID)) + " has been canceled by the server"}
+
 		case 0x4:
 			indexIds := bytes.IndexByte(raw, 0x03)
 			indexWin := bytes.IndexByte(raw, 0x5)
