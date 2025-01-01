@@ -54,7 +54,7 @@ func BenchmarkRegnhttp(b *testing.B) {
 		} else {
 			Errors++
 		}
-		fmt.Println(response.BodyString())
+		// fmt.Println(response.BodyString())
 	}
 
 	fmt.Println("Corrects:", Corrects, "; Errors:", Errors)
