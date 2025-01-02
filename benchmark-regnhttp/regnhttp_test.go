@@ -3,6 +3,8 @@ package regn
 import (
 	"crypto/tls"
 	"fmt"
+
+	// "fmt"
 	"strconv"
 	"strings"
 	"testing"
@@ -10,7 +12,7 @@ import (
 	regn "github.com/xsxo/regnhttp"
 )
 
-var RequestsNumber int = 17773
+var RequestsNumber int = 59599
 var Errors int
 var Corrects int
 
@@ -35,11 +37,11 @@ func BenchmarkRegnhttp(b *testing.B) {
 	b.StartTimer()
 
 	for xo := 1; xo != RequestsNumber; xo += 2 {
+		// fmt.Println(xo)
 		request.SetBodyString("id=" + strconv.Itoa(xo))
 		if err := c.Http2SendRequest(request, uint32(xo)); err != nil {
 			panic(err.Error())
 		}
-		// fmt.Println(xo)
 	}
 
 	for xo := 1; xo != RequestsNumber; xo += 2 {

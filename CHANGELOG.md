@@ -14,3 +14,9 @@
 # v1.3.0 (25/1/1)
 - Fix End stream http2
 - Fix Payload legnth
+
+# v1.4.0 (25/1/3)
+- Fix c.theBuffer when save other streams
+- Fix Pending var
+- Fix Window Update Frame from client side
+- Fix Benchmark regnhttp stopped without reason
