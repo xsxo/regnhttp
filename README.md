@@ -47,6 +47,7 @@ ok  	benchmark	20.995s
 <br>
 - There is no performance difference between HTTP versions on local servers. The difference will only be noticeable when sending requests to a remote server.
 
+
 ## Features
 - `Connect` Function (create connection with server before send requests)
 - Reuse Request & Response object instead of creating a new one
