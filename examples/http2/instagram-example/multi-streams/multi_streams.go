@@ -55,9 +55,8 @@ func main() {
 		cn.Http2SendRequest(req, uint32(loop))
 	}
 
-	loop = 1
-	for loop < int(max_streams) {
-		loop += 2
+	for loop != 1 {
+		loop -= 2
 
 		// read http response with odd stream id you send (require odd stream id)
 		if err := cn.Http2ReadRespone(res, uint32(loop)); err != nil {
