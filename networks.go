@@ -462,7 +462,7 @@ func (c *Client) Http2ReadRespone(RES *ResponseType, StreamID uint32) error {
 		panic("stream id is not odd")
 	} else if c.hostConnected == "" {
 		return &RegnError{"the connection has been closed"}
-	} else if RES.Header.decoder == nil {
+	} else if !RES.Header.upgraded {
 		RES.Http2Upgrade()
 	}
 
@@ -472,8 +472,8 @@ func (c *Client) Http2ReadRespone(RES *ResponseType, StreamID uint32) error {
 	}
 
 	c.run = true
-	// RES.Header.contectLegnth = -1
-	RES.Header.thebuffer.Reset()
+	RES.Header.theHeader.Reset()
+	RES.Header.theBuffer.Reset()
 
 	data := make([]byte, 4)
 	binary.BigEndian.PutUint32(data, StreamID)
@@ -493,9 +493,9 @@ func (c *Client) Http2ReadRespone(RES *ResponseType, StreamID uint32) error {
 			}
 			switch c.theBuffer.B[indexRaw+3] {
 			case 0x0:
-				RES.Header.thebuffer.Write(c.theBuffer.B[indexRaw+9 : payloadLength])
+				RES.Header.theBuffer.Write(c.theBuffer.B[indexRaw+9 : payloadLength])
 			case 0x1:
-				RES.Header.decoder.Write(c.theBuffer.B[indexRaw+9 : payloadLength])
+				RES.Header.theHeader.Write(c.theBuffer.B[indexRaw+9 : payloadLength])
 			case 0x3:
 				c.run = false
 				c.theBuffer.B = append(c.theBuffer.B[:indexRaw], c.theBuffer.B[payloadLength:]...)
@@ -561,7 +561,7 @@ func (c *Client) Http2ReadRespone(RES *ResponseType, StreamID uint32) error {
 				continue
 			}
 
-			RES.Header.thebuffer.Write(raw[9:payloadLength])
+			RES.Header.theBuffer.Write(raw[9:payloadLength])
 
 			if raw[4] == 0x1 || raw[4] == 0x0 {
 				c.h2Streams++
@@ -574,7 +574,7 @@ func (c *Client) Http2ReadRespone(RES *ResponseType, StreamID uint32) error {
 				continue
 			}
 
-			RES.Header.decoder.Write(raw[9:payloadLength])
+			RES.Header.theHeader.Write(raw[9:payloadLength])
 
 			if raw[4] == 0x1 || raw[4] == 0x0 {
 				c.h2Streams++
@@ -632,11 +632,7 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 
 	c.run = true
 
-	if REQ.Header.hpackHeaders != nil {
-		REQ.HttpDowngrade()
-	}
-
-	if RES.Header.decoder != nil {
+	if RES.Header.upgraded {
 		RES.HttpDowngrade()
 	}
 
@@ -650,7 +646,7 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 		return err
 	}
 
-	RES.Header.thebuffer.Reset()
+	RES.Header.theBuffer.Reset()
 	for {
 		if _, err := c.peeker.Peek(1); err != nil {
 			c.Close()
@@ -660,20 +656,20 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 		raw, _ := c.peeker.Peek(le)
 
 		c.peeker.Discard(le)
-		RES.Header.thebuffer.Write(raw)
+		RES.Header.theBuffer.Write(raw)
 		raw = nil
 
-		if bytes.Contains(RES.Header.thebuffer.B, lines[1:]) {
-			contentLengthMatch := lenRegex.FindSubmatch(RES.Header.thebuffer.B)
+		if bytes.Contains(RES.Header.theBuffer.B, lines[1:]) {
+			contentLengthMatch := lenRegex.FindSubmatch(RES.Header.theBuffer.B)
 			if len(contentLengthMatch) > 1 {
 				contentLength, _ := strconv.Atoi(string(contentLengthMatch[1]))
 				contentLengthMatch[0] = nil
 				contentLengthMatch[1] = nil
 
-				if len(bytes.SplitN(RES.Header.thebuffer.B, lines[1:], 2)[1]) >= contentLength {
+				if len(bytes.SplitN(RES.Header.theBuffer.B, lines[1:], 2)[1]) >= contentLength {
 					break
 				}
-			} else if bytes.Contains(RES.Header.thebuffer.B, lines) {
+			} else if bytes.Contains(RES.Header.theBuffer.B, lines) {
 				break
 			}
 		}

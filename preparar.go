@@ -16,9 +16,9 @@ type ConnectionInformation struct {
 	myhost       string
 	mytls        bool
 	hpackHeaders []hpack.HeaderField
-	hpackEncoder *hpack.Encoder
-	rawBody      bytebufferpool.ByteBuffer
-	raw          bytebufferpool.ByteBuffer
+	// hpackEncoder *hpack.Encoder
+	rawBody bytebufferpool.ByteBuffer
+	raw     bytebufferpool.ByteBuffer
 }
 
 type RequestType struct {
@@ -34,7 +34,7 @@ func (REQ *RequestType) Close() {
 		bufferPool.Put(&REQ.Header.rawBody)
 
 		REQ.Header.hpackHeaders = nil
-		REQ.Header.hpackEncoder = nil
+		// REQ.Header.hpackEncoder = nil
 	}
 }
 
@@ -61,7 +61,7 @@ func Http2Request() *RequestType {
 }
 
 func (REQ *RequestType) HttpDowngrade() {
-	if REQ.Header.hpackEncoder != nil {
+	if REQ.Header.hpackHeaders != nil {
 		REQ.Header.raw.Reset()
 
 		REQ.Header.raw.WriteString(REQ.Header.hpackHeaders[0].Value + " ")
@@ -84,7 +84,7 @@ func (REQ *RequestType) HttpDowngrade() {
 		REQ.Header.raw.Write(REQ.Header.rawBody.B)
 
 		REQ.Header.hpackHeaders = nil
-		REQ.Header.hpackEncoder = nil
+		// REQ.Header.hpackEncoder = nil
 		REQ.Header.rawBody.Reset()
 		bufferPool.Put(&REQ.Header.rawBody)
 	}
@@ -93,7 +93,7 @@ func (REQ *RequestType) HttpDowngrade() {
 func (REQ *RequestType) Http2Upgrade() {
 	REQ.Header.raw.Reset()
 	REQ.Header.rawBody = *bufferPool.Get()
-	REQ.Header.hpackEncoder = hpack.NewEncoder(&REQ.Header.raw)
+	hpackEncoder := hpack.NewEncoder(&REQ.Header.raw)
 
 	if len(REQ.Header.raw.B) != 0 {
 		REQ.Header.hpackHeaders = []hpack.HeaderField{}
@@ -132,7 +132,7 @@ func (REQ *RequestType) Http2Upgrade() {
 		REQ.Header.raw.Reset()
 
 		for _, Head := range REQ.Header.hpackHeaders {
-			REQ.Header.hpackEncoder.WriteField(Head)
+			hpackEncoder.WriteField(Head)
 		}
 
 		if len(FullRequest) == 2 {
@@ -150,7 +150,7 @@ func (REQ *RequestType) Http2Upgrade() {
 		}
 	}
 	for _, xo := range REQ.Header.hpackHeaders {
-		REQ.Header.hpackEncoder.WriteField(xo)
+		hpackEncoder.WriteField(xo)
 	}
 }
 
@@ -246,22 +246,22 @@ func (REQ *RequestType) SetURL(Url string) {
 func (REQ *ConnectionInformation) Set(key string, value string) {
 	if REQ.hpackHeaders != nil {
 		REQ.raw.Reset()
-		REQ.hpackEncoder = hpack.NewEncoder(&REQ.raw)
+		hpackEncoder := hpack.NewEncoder(&REQ.raw)
 
 		Head := hpack.HeaderField{Name: strings.ToLower(key), Value: value}
 		for r, xo := range REQ.hpackHeaders {
 			if strings.EqualFold(xo.Name, key) {
 				REQ.hpackHeaders[r] = Head
-				REQ.hpackEncoder.WriteField(Head)
+				hpackEncoder.WriteField(Head)
 				Head.Name = ""
 			} else {
-				REQ.hpackEncoder.WriteField(xo)
+				hpackEncoder.WriteField(xo)
 			}
 		}
 
 		if Head.Name != "" {
 			REQ.hpackHeaders = append(REQ.hpackHeaders, Head)
-			REQ.hpackEncoder.WriteField(Head)
+			hpackEncoder.WriteField(Head)
 		}
 
 	} else {
@@ -296,12 +296,12 @@ func (REQ *ConnectionInformation) Set(key string, value string) {
 func (REQ *ConnectionInformation) Del(key string) {
 	if REQ.hpackHeaders != nil {
 		REQ.raw.Reset()
-		REQ.hpackEncoder = hpack.NewEncoder(&REQ.raw)
+		hpackEncoder := hpack.NewEncoder(&REQ.raw)
 		for r, xo := range REQ.hpackHeaders {
 			if strings.EqualFold(xo.Name, key) {
 				REQ.hpackHeaders = remove(REQ.hpackHeaders, r)
 			} else {
-				REQ.hpackEncoder.WriteField(xo)
+				hpackEncoder.WriteField(xo)
 			}
 		}
 	} else {
