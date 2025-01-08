@@ -399,11 +399,11 @@ func (c *Client) Http2SendRequest(REQ *RequestType, StreamID uint32) error {
 
 	binary.Write(c.flusher, binary.BigEndian, StreamID&0x7FFFFFFF) // stream id
 	c.flusher.Write(REQ.Header.raw.B)                              // payload
-	if err := c.flusher.Flush(); err != nil {
-		c.Close()
-		c.run = false
-		return err
-	}
+	// if err := c.flusher.Flush(); err != nil {
+	// 	c.Close()
+	// 	c.run = false
+	// 	return err
+	// }
 
 	c.flusher.Write([]byte{
 		byte(payloadLengthBody >> 16), // len payload 3 bytes

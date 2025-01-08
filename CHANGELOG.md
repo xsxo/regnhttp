@@ -20,3 +20,9 @@
 - Fix Pending var
 - Fix Window Update Frame from client side
 - Fix Benchmark regnhttp stopped without reason
+
+# v1.5.0 (25/1/8)
+- Fix Http2 Headers Clear after read
+- Fix Http2 Decoder & Encoder
+- Fix Http2 Response Buffer
+- Fix Http2 Flusher in Http2SendRequest func
