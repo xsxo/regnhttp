@@ -43,6 +43,8 @@ PASS
 ok  	benchmark	20.995s
 ```
 
+The performance of regnhttp and fasthttp is very similar when using HTTP/1.1 only. This is because both libraries are built on the same performance optimization concepts.
+
 
 ## Features
 - `Connect` Function (create connection with server before send requests)
