@@ -135,12 +135,10 @@ func (RES *ResponseType) Json() (map[string]interface{}, error) {
 func (HEAD *headStruct) GetAll() map[string]string {
 	forReturn := make(map[string]string)
 
-	if HEAD.theHeader.Len() != 0 {
+	if HEAD.upgraded {
 		headers := []hpack.HeaderField{}
 		decoder := hpack.NewDecoder(4096, func(f hpack.HeaderField) {
-			if strings.EqualFold(f.Name, "content-length") {
-				headers = append(headers, f)
-			}
+			headers = append(headers, f)
 		})
 		decoder.Write(HEAD.theHeader.B)
 
@@ -167,12 +165,10 @@ func (HEAD *headStruct) GetAll() map[string]string {
 }
 
 func (HEAD *headStruct) Get(name string) string {
-	if HEAD.theHeader.Len() != 0 {
+	if HEAD.upgraded {
 		headers := []hpack.HeaderField{}
 		decoder := hpack.NewDecoder(4096, func(f hpack.HeaderField) {
-			if strings.EqualFold(f.Name, "content-length") {
-				headers = append(headers, f)
-			}
+			headers = append(headers, f)
 		})
 		decoder.Write(HEAD.theHeader.B)
 

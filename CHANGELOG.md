@@ -26,3 +26,8 @@
 - Fix Http2 Decoder & Encoder
 - Fix Http2 Response Buffer
 - Fix Http2 Flusher in Http2SendRequest func
+
+# v1.6.0 (25/1/9)
+- Fix Http2 Read Headers -> Get & GetAll
+- Fix Http2 Read StatusCode
+- Fix Http2 Read Reason
