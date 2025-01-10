@@ -61,7 +61,7 @@ func Http2Request() *RequestType {
 }
 
 func (REQ *RequestType) HttpDowngrade() {
-	if REQ.Header.hpackHeaders != nil {
+	if len(REQ.Header.hpackHeaders) != 0 {
 		REQ.Header.raw.Reset()
 
 		REQ.Header.raw.WriteString(REQ.Header.hpackHeaders[0].Value + " ")
@@ -69,7 +69,7 @@ func (REQ *RequestType) HttpDowngrade() {
 		REQ.Header.raw.WriteString(REQ.Header.hpackHeaders[1].Value + " HTTP/1.1\r\n")
 
 		REQ.Header.raw.WriteString("Host: " + REQ.Header.hpackHeaders[3].Value + "\r\n")
-		REQ.Header.hpackHeaders = REQ.Header.hpackHeaders[3:]
+		REQ.Header.hpackHeaders = REQ.Header.hpackHeaders[4:]
 
 		for _, head := range REQ.Header.hpackHeaders {
 			REQ.Header.raw.WriteString(head.Name + ": " + head.Value + "\r\n")

@@ -388,35 +388,22 @@ func (c *Client) Http2SendRequest(REQ *RequestType, StreamID uint32) error {
 		byte(payloadLengthHeaders >> 16), // len payload 3 bytes
 		byte(payloadLengthHeaders >> 8),  // len payload 3 bytes
 		byte(payloadLengthHeaders),       // len payload 3 bytes
-		// 0x1,                              // type of frame
-		// 0x4,                              // end stream (false) && end header (true)
+		0x1,                              // type of frame
+		0x4,                              // end stream (false) && end header (true)
 	})
-
-	// c.h2WinServer -= uint32(payloadLengthHeaders)
-
-	c.flusher.WriteByte(0x1)
-	c.flusher.WriteByte(0x4)
 
 	binary.Write(c.flusher, binary.BigEndian, StreamID&0x7FFFFFFF) // stream id
 	c.flusher.Write(REQ.Header.raw.B)                              // payload
-	// if err := c.flusher.Flush(); err != nil {
-	// 	c.Close()
-	// 	c.run = false
-	// 	return err
-	// }
 
 	c.flusher.Write([]byte{
 		byte(payloadLengthBody >> 16), // len payload 3 bytes
 		byte(payloadLengthBody >> 8),  // len payload 3 bytes
 		byte(payloadLengthBody),       // len payload 3 bytes
-		// 0x0,                           // type of frame
-		// 0x1,                           // end stream (true)
+		0x0,                           // type of frame
+		0x1,                           // end stream (true)
 	})
 
 	c.h2WinServer -= payloadLengthBody
-
-	c.flusher.WriteByte(0x0)
-	c.flusher.WriteByte(0x1)
 
 	binary.Write(c.flusher, binary.BigEndian, StreamID&0x7FFFFFFF) // stream id
 	c.flusher.Write(REQ.Header.rawBody.B)                          // payload
@@ -502,7 +489,7 @@ func (c *Client) Http2ReadRespone(RES *ResponseType, StreamID uint32) error {
 				return &RegnError{"the stream id " + strconv.Itoa(int(StreamID)) + " has been canceled by the server"}
 			}
 
-			if c.theBuffer.B[indexRaw+4] == 0x1 || c.theBuffer.B[indexRaw+4] == 0x0 {
+			if c.theBuffer.B[indexRaw+4] == 0x1 { // || c.theBuffer.B[indexRaw+4] == 0x0
 				c.h2Streams++
 				c.theBuffer.B = append(c.theBuffer.B[:indexRaw], c.theBuffer.B[payloadLength:]...)
 				c.run = false
@@ -536,6 +523,7 @@ func (c *Client) Http2ReadRespone(RES *ResponseType, StreamID uint32) error {
 			}
 
 		} else if payloadLength > buffered {
+
 			if raw[3] == 0x0 {
 				c.h2WinClient -= uint32(payloadLength - 9)
 			}
@@ -563,7 +551,7 @@ func (c *Client) Http2ReadRespone(RES *ResponseType, StreamID uint32) error {
 
 			RES.Header.theBuffer.Write(raw[9:payloadLength])
 
-			if raw[4] == 0x1 || raw[4] == 0x0 {
+			if raw[4] == 0x1 { // || raw[4] == 0x0
 				c.h2Streams++
 				c.run = false
 			}
@@ -576,7 +564,7 @@ func (c *Client) Http2ReadRespone(RES *ResponseType, StreamID uint32) error {
 
 			RES.Header.theHeader.Write(raw[9:payloadLength])
 
-			if raw[4] == 0x1 || raw[4] == 0x0 {
+			if raw[4] == 0x1 { // || raw[4] == 0x0
 				c.h2Streams++
 				c.run = false
 			}
@@ -634,6 +622,10 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 
 	if RES.Header.upgraded {
 		RES.HttpDowngrade()
+	}
+
+	if len(REQ.Header.hpackHeaders) != 0 {
+		REQ.HttpDowngrade()
 	}
 
 	if _, err := c.flusher.Write(REQ.Header.raw.B); err != nil {

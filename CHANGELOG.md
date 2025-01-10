@@ -31,3 +31,8 @@
 - Fix Http2 Read Headers -> Get & GetAll
 - Fix Http2 Read StatusCode
 - Fix Http2 Read Reason
+
+# v1.7.0 (25/1/11)
+- Fix Http2 Tags
+- Fix Http2 REQ.HttpDowngrade function
+- Improve performance Buffer writer in flush
