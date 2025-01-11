@@ -27,6 +27,10 @@ type Client struct {
 	// Dialer to create dial connection
 	Dialer *net.Dialer
 
+	// If facing issues with incomplete responses, this indicates that the server is operating with a Stream-Level Flow Control system. In this case, you should set this option to true.
+	// If not experiencing this issue, you can skip this option.
+	Http2StreamLevelFlowControl bool
+
 	h2Streams   uint32
 	h2WinServer uint32
 	h2FrameSize uint32
@@ -407,16 +411,22 @@ func (c *Client) Http2SendRequest(REQ *RequestType, StreamID uint32) error {
 		0x1,                           // end stream (true)
 	})
 
-	c.h2WinServer -= payloadLengthBody
-
 	binary.Write(c.flusher, binary.BigEndian, StreamID&0x7FFFFFFF) // stream id
 	c.flusher.Write(REQ.Header.rawBody.B)                          // payload
+
+	if c.Http2StreamLevelFlowControl {
+		c.flusher.Write([]byte{0x00, 0x00, 0x04, 0x8, 0x00})
+		binary.Write(c.flusher, binary.BigEndian, uint32(StreamID))
+		binary.Write(c.flusher, binary.BigEndian, uint32(6655535))
+	}
+
 	if err := c.flusher.Flush(); err != nil {
 		c.Close()
 		c.run = false
 		return err
 	}
 
+	c.h2WinServer -= payloadLengthBody
 	c.h2Streams--
 	c.run = false
 	return nil
@@ -432,6 +442,7 @@ func (c *Client) h2WindowUpdate() {
 	}
 
 	increment := c.h2PrvWinC - c.h2WinClient
+
 	c.flusher.Write([]byte{0x00, 0x00, 0x04})
 	c.flusher.WriteByte(0x8)
 	c.flusher.WriteByte(0x00)
@@ -544,27 +555,27 @@ func (c *Client) Http2ReadRespone(RES *ResponseType, StreamID uint32) error {
 		case 0x0:
 			c.h2WinClient -= uint32(payloadLength - 9)
 			Stream := binary.BigEndian.Uint32(raw[5:9]) & 0x7FFFFFFF
-			if StreamID != Stream || raw[4] != 0x1 && raw[4] != 0x0 {
+			if StreamID != Stream { // || raw[4] != 0x1 && raw[4] != 0x0
 				c.theBuffer.Write(raw[:payloadLength])
 				continue
 			}
 
 			RES.Header.theBuffer.Write(raw[9:payloadLength])
-
 			if raw[4] == 0x1 { // || raw[4] == 0x0
 				c.h2Streams++
 				c.run = false
 			}
 		case 0x1:
 			Stream := binary.BigEndian.Uint32(raw[5:9]) & 0x7FFFFFFF
-			if StreamID != Stream || raw[4] != 0x4 && raw[4] != 0x1 && raw[4] != 0x0 {
+
+			if StreamID != Stream { // || raw[4] != 0x4 && raw[4] != 0x1 && raw[4] != 0x0
 				c.theBuffer.Write(raw[:payloadLength])
 				continue
 			}
 
 			RES.Header.theHeader.Write(raw[9:payloadLength])
 
-			if raw[4] == 0x1 { // || raw[4] == 0x0
+			if raw[4] == 0x1 || raw[4] == 0x5 { // || raw[4] == 0x0
 				c.h2Streams++
 				c.run = false
 			}
