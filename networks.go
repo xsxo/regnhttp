@@ -312,30 +312,34 @@ func (c *Client) Connect(REQ *RequestType) error {
 			buffred := c.peeker.Buffered()
 			raw, _ := c.peeker.Peek(buffred)
 			c.peeker.Discard(buffred)
-			indexIds := bytes.IndexByte(raw, 0x03)
-			indexWin := bytes.IndexByte(raw, 0x04)
-			indexMax := bytes.IndexByte(raw, 0x05)
 
 			if raw[3] != 0x4 {
 				c.Close()
 				return &RegnError{Message: "field foramt HTTP2 settings from the server"}
 			}
 
-			if indexIds != -1 {
-				c.h2Streams = binary.BigEndian.Uint32(raw[indexIds+1 : indexIds+5])
-			} else {
+			raw = raw[9:]
+			for len(raw) >= 6 {
+				switch binary.BigEndian.Uint16(raw[:2]) {
+				case 0x03:
+					c.h2Streams = binary.BigEndian.Uint32(raw[2:6])
+				case 0x04:
+					c.h2WinServer = binary.BigEndian.Uint32(raw[2:6])
+				case 0x05:
+					c.h2FrameSize = binary.BigEndian.Uint32(raw[2:6])
+				}
+				raw = raw[6:]
+			}
+
+			if c.h2FrameSize == 0 {
 				c.h2Streams = 100
 			}
 
-			if indexWin != -1 {
-				c.h2WinServer = binary.BigEndian.Uint32(raw[indexWin : indexWin+5])
-			} else {
+			if c.h2WinServer == 0 {
 				c.h2WinServer = 65535
 			}
 
-			if indexMax != -1 {
-				c.h2FrameSize = binary.BigEndian.Uint32(raw[indexMax+1 : indexMax+5])
-			} else {
+			if c.h2FrameSize == 0 {
 				c.h2FrameSize = 16384
 			}
 
@@ -471,13 +475,10 @@ func (c *Client) Http2ReadRespone(RES *ResponseType, StreamID uint32) error {
 
 		for indexRaw > -1 {
 			payloadLength := int(binary.BigEndian.Uint32(append([]byte{0}, c.theBuffer.B[indexRaw:indexRaw+3]...))) + 9 + indexRaw
-
-			if uint32(payloadLength-indexRaw) >= c.h2WinClient {
-				c.h2WindowUpdate()
-				break
-			} else if payloadLength > c.theBuffer.Len() {
+			if payloadLength > c.theBuffer.Len() {
 				break
 			}
+
 			switch c.theBuffer.B[indexRaw+3] {
 			case 0x0:
 				RES.Header.theBuffer.Write(c.theBuffer.B[indexRaw+9 : payloadLength])
@@ -498,6 +499,10 @@ func (c *Client) Http2ReadRespone(RES *ResponseType, StreamID uint32) error {
 
 			c.theBuffer.B = append(c.theBuffer.B[:indexRaw], c.theBuffer.B[payloadLength:]...)
 			indexRaw = bytes.Index(c.theBuffer.B, data) - 5
+		}
+
+		if c.h2WinClient > c.h2PrvWinC || c.h2WinClient == 0 {
+			c.h2WindowUpdate()
 		}
 
 		if _, err := c.peeker.Peek(9); err != nil {
@@ -523,10 +528,10 @@ func (c *Client) Http2ReadRespone(RES *ResponseType, StreamID uint32) error {
 			}
 
 		} else if payloadLength > buffered {
-
 			if raw[3] == 0x0 {
 				c.h2WinClient -= uint32(payloadLength - 9)
 			}
+
 			pending = payloadLength - buffered
 			c.theBuffer.Write(raw)
 			c.peeker.Discard(buffered)
@@ -537,12 +542,7 @@ func (c *Client) Http2ReadRespone(RES *ResponseType, StreamID uint32) error {
 
 		switch raw[3] {
 		case 0x0:
-			if uint32(payloadLength-9) >= c.h2WinClient {
-				c.h2WindowUpdate()
-			} else {
-				c.h2WinClient -= uint32(payloadLength - 9)
-			}
-
+			c.h2WinClient -= uint32(payloadLength - 9)
 			Stream := binary.BigEndian.Uint32(raw[5:9]) & 0x7FFFFFFF
 			if StreamID != Stream || raw[4] != 0x1 && raw[4] != 0x0 {
 				c.theBuffer.Write(raw[:payloadLength])
@@ -579,12 +579,33 @@ func (c *Client) Http2ReadRespone(RES *ResponseType, StreamID uint32) error {
 			c.h2Streams++
 			c.run = false
 			return &RegnError{"the stream id `" + strconv.Itoa(int(StreamID)) + "` has been canceled by the server"}
+
+		case 0x4:
+			raw = raw[9:]
+			for len(raw) >= 6 {
+				switch binary.BigEndian.Uint16(raw[:2]) {
+				case 0x03:
+					c.h2Streams = binary.BigEndian.Uint32(raw[2:6]) - c.h2Streams
+				case 0x04:
+					c.h2WinServer = binary.BigEndian.Uint32(raw[2:6]) - c.h2WinServer
+				case 0x05:
+					c.h2FrameSize = binary.BigEndian.Uint32(raw[2:6]) - c.h2FrameSize
+				}
+				raw = raw[6:]
+			}
+
 		case 0x7:
 			c.Close()
 			return &RegnError{Message: "the connection has been closed by the server 'http2.GoAwayFrame'"}
 		case 0x8:
-			winsize := binary.BigEndian.Uint32(raw[9:13])
-			c.h2WinServer += winsize
+			Stream := binary.BigEndian.Uint32(raw[5:9]) & 0x7FFFFFFF
+			if Stream == 0 {
+				winsize := binary.BigEndian.Uint32(raw[9:13])
+				c.h2WinServer += winsize
+			} else {
+				c.flusher.Write(raw)
+				c.flusher.Flush()
+			}
 		}
 	}
 

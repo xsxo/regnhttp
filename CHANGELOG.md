@@ -36,3 +36,6 @@
 - Fix Http2 Tags
 - Fix Http2 REQ.HttpDowngrade function
 - Improve performance Buffer writer in flush
+
+# v1.8.0 (25/1/12)
+- Fix Http2 stream flow control window
