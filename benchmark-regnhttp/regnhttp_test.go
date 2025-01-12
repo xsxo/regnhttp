@@ -12,7 +12,7 @@ import (
 	regn "github.com/xsxo/regnhttp"
 )
 
-var RequestsNumber int = 59599
+var RequestsNumber int = 19589
 var Errors int
 var Corrects int
 
