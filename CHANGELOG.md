@@ -40,3 +40,9 @@
 # v1.8.0 (25/1/12)
 - Fix Http2 stream flow control window
 - Added `Http2StreamLevelFlowControl` object
+
+# v1.9.0 (25/1/12)
+- Removed `Http2StreamLevelFlowControl` object
+- Convert `Http2StreamLevelFlowControl` to auto
+- Added Http2SendHeaders function
+- Added Http2SendBody function
