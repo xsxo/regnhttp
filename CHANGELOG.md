@@ -46,3 +46,6 @@
 - Convert `Http2StreamLevelFlowControl` to auto
 - Added Http2SendHeaders function
 - Added Http2SendBody function
+
+# v1.10.0 (25/1/30)
+- Fix established proxy

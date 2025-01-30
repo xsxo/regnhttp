@@ -23,7 +23,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 
 	w.Write(body)
-	time.Sleep(2 * time.Millisecond) // simple processing
+	time.Sleep(1 * time.Millisecond) // simple processing
 }
 
 func main() {

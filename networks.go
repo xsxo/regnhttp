@@ -115,13 +115,15 @@ func (c *Client) connectNet(host string, port string) error {
 func (c *Client) connectHost(address string) error {
 	therequest := bufferPool.Get()
 	therequest.Reset()
-	therequest.WriteString("CONNECT " + address + " HTTP/1.1\r\nHost: " + address + "\r\nConnection: Keep-Alive")
+	therequest.WriteString("CONNECT " + address + " HTTP/1.1\r\n")
+	therequest.WriteString("Host: " + address + "\r\n")
+	therequest.WriteString("Connection: Keep-Alive\r\n") // Optional: can use Keep-Alive depending on use case
 
 	if c.authorization != "" {
-		therequest.WriteString("Authorization: " + c.authorization)
+		therequest.WriteString("Proxy-Authorization: Basic " + c.authorization + "\r\n")
 	}
-	therequest.WriteString("\r\n\r\n")
 
+	therequest.WriteString("\r\n")
 	if _, err := c.flusher.Write(therequest.B); err != nil {
 		c.Close()
 		return &RegnError{Message: "field proxy connection with '" + address + "' address"}
@@ -137,12 +139,10 @@ func (c *Client) connectHost(address string) error {
 	if raw, err := c.peeker.Peek(20); err != nil {
 		return &RegnError{Message: "field proxy connection with '" + address + "' address"}
 	} else {
-		readed := statusRegex.FindSubmatch(raw)
-		if len(readed) <= 0 {
+		if !bytes.Contains(raw, []byte("HTTP/1.1 200")) {
 			c.Close()
 			return &RegnError{Message: "field proxy connection with '" + address + "' address"}
 		}
-		readed[0] = nil
 		c.peeker.Discard(c.peeker.Buffered())
 	}
 
@@ -151,7 +151,7 @@ func (c *Client) connectHost(address string) error {
 
 func (c *Client) Proxy(Url string) {
 	if c.hostConnected != "" {
-		panic("can not set proxy after send request")
+		panic("can not set proxy after connect with server")
 	}
 
 	c.hostConnected = ""
