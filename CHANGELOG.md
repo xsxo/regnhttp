@@ -49,3 +49,8 @@
 
 # v1.10.0 (25/1/30)
 - Fix established proxy
+
+# v1.11.0 (25/1/30)
+- Change raw established request
+- Fix ReadDedline (read timeout)
+- Change `NetConnection` of Client object to public

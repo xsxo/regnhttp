@@ -16,16 +16,19 @@ import (
 
 type Client struct {
 	// Timeout Connection
-	Timeout int
+	Timeout time.Duration
 
 	// Timeout Reading Response
-	TimeoutRead int
+	TimeoutRead time.Duration
 
 	// Tls Context
 	TLSConfig *tls.Config
 
 	// Dialer to create dial connection
 	Dialer *net.Dialer
+
+	// Net connection of Client
+	NetConnection net.Conn
 
 	h2Streams   uint32
 	h2WinServer uint32
@@ -37,7 +40,6 @@ type Client struct {
 
 	useProxy      bool
 	hostConnected string
-	connection    net.Conn
 	run           bool
 
 	peeker  *bufio.Reader
@@ -84,29 +86,33 @@ func (c *Client) Http2Upgrade() {
 }
 
 func (c *Client) connectNet(host string, port string) error {
-	if c.Timeout == 0 {
-		c.Timeout = 10
+	if c.Timeout.Seconds() == 0 {
+		c.Timeout = time.Duration(10 * time.Second)
 	}
-	if c.TimeoutRead == 0 {
+
+	if c.TimeoutRead.Seconds() == 0 {
 		c.TimeoutRead = c.Timeout
 	}
 
 	if c.Dialer == nil {
-		c.Dialer = &net.Dialer{Timeout: time.Duration(c.Timeout) * time.Second, Deadline: time.Now().Add(time.Duration(c.Timeout) * time.Second)}
+		c.Dialer = &net.Dialer{Timeout: c.Timeout}
 	}
 
 	var err error
 
 	if port != "443" {
-		c.connection, err = c.Dialer.Dial("tcp", host+":"+port)
+		c.NetConnection, err = c.Dialer.Dial("tcp", host+":"+port)
 	} else {
-		c.connection, err = tls.DialWithDialer(c.Dialer, "tcp4", host+":"+port, c.TLSConfig)
+		c.NetConnection, err = tls.DialWithDialer(c.Dialer, "tcp4", host+":"+port, c.TLSConfig)
 	}
 
 	if err != nil {
 		return &RegnError{Message: "field create connection with '" + host + ":" + port + "' address\n" + err.Error()}
 	}
 
+	c.NetConnection.SetReadDeadline(time.Now().Add(c.TimeoutRead))
+	c.Timeout = time.Duration(0 * time.Second)
+	c.TimeoutRead = time.Duration(0 * time.Second)
 	c.createLines()
 	err = nil
 	return nil
@@ -117,7 +123,6 @@ func (c *Client) connectHost(address string) error {
 	therequest.Reset()
 	therequest.WriteString("CONNECT " + address + " HTTP/1.1\r\n")
 	therequest.WriteString("Host: " + address + "\r\n")
-	therequest.WriteString("Connection: Keep-Alive\r\n") // Optional: can use Keep-Alive depending on use case
 
 	if c.authorization != "" {
 		therequest.WriteString("Proxy-Authorization: Basic " + c.authorization + "\r\n")
@@ -181,17 +186,17 @@ func (c *Client) Proxy(Url string) {
 }
 
 func (c *Client) Close() {
-	if new, ok := c.connection.(*tls.Conn); ok {
+	if new, ok := c.NetConnection.(*tls.Conn); ok {
 		if new != nil {
 			new.Close()
-			c.connection = nil
+			c.NetConnection = nil
 			c.hostConnected = ""
 		}
 	} else {
-		if c.connection != nil {
-			c.connection.Close()
+		if c.NetConnection != nil {
+			c.NetConnection.Close()
 			c.hostConnected = ""
-			c.connection = nil
+			c.NetConnection = nil
 		}
 	}
 
@@ -224,15 +229,15 @@ func (c *Client) closeLines() {
 func (c *Client) createLines() {
 	c.closeLines()
 
-	if new, ok := c.connection.(*tls.Conn); ok {
+	if new, ok := c.NetConnection.(*tls.Conn); ok {
 		if new != nil {
 			c.peeker = genPeeker(new)
 			c.flusher = genFlusher(new)
 		}
 	} else {
-		if c.connection != nil {
-			c.peeker = genPeeker(c.connection)
-			c.flusher = genFlusher(c.connection)
+		if c.NetConnection != nil {
+			c.peeker = genPeeker(c.NetConnection)
+			c.flusher = genFlusher(c.NetConnection)
 		}
 	}
 }
@@ -271,7 +276,7 @@ func (c *Client) Connect(REQ *RequestType) error {
 			}
 
 			if REQ.Header.myport == "443" || REQ.Header.mytls {
-				c.connection = tls.Client(c.connection, c.TLSConfig)
+				c.NetConnection = tls.Client(c.NetConnection, c.TLSConfig)
 				c.createLines()
 			}
 
@@ -282,7 +287,7 @@ func (c *Client) Connect(REQ *RequestType) error {
 			}
 
 			if REQ.Header.mytls {
-				c.connection = tls.Client(c.connection, c.TLSConfig)
+				c.NetConnection = tls.Client(c.NetConnection, c.TLSConfig)
 				c.createLines()
 			}
 		}
@@ -520,9 +525,9 @@ func (c *Client) Http2ReadRespone(RES *ResponseType, StreamID uint32) error {
 		RES.Http2Upgrade()
 	}
 
-	if c.TimeoutRead != 0 {
-		c.Dialer.Deadline = time.Now().Add(time.Duration(c.TimeoutRead) * time.Second)
-		c.TimeoutRead = 0
+	if c.TimeoutRead.Seconds() != 0 {
+		c.NetConnection.SetReadDeadline(time.Now().Add(c.TimeoutRead))
+		c.TimeoutRead = time.Duration(0 * time.Second)
 	}
 
 	c.run = true
@@ -724,9 +729,9 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 		return err
 	}
 
-	if c.TimeoutRead != 0 {
-		c.Dialer.Deadline = time.Now().Add(time.Duration(c.TimeoutRead) * time.Second)
-		c.TimeoutRead = 0
+	if c.TimeoutRead.Seconds() != 0 {
+		c.NetConnection.SetReadDeadline(time.Now().Add(c.TimeoutRead))
+		c.TimeoutRead = time.Duration(0 * time.Second)
 	}
 
 	c.run = true
