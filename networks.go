@@ -109,7 +109,6 @@ func (c *Client) connectNet(host string, port string) error {
 	if err != nil {
 		return &RegnError{Message: "field create connection with '" + host + ":" + port + "' address\n" + err.Error()}
 	}
-
 	c.NetConnection.SetReadDeadline(time.Now().Add(c.TimeoutRead))
 	c.Timeout = time.Duration(0 * time.Second)
 	c.TimeoutRead = time.Duration(0 * time.Second)
@@ -119,34 +118,25 @@ func (c *Client) connectNet(host string, port string) error {
 }
 
 func (c *Client) connectHost(address string) error {
-	therequest := bufferPool.Get()
-	therequest.Reset()
-	therequest.WriteString("CONNECT " + address + " HTTP/1.1\r\n")
-	therequest.WriteString("Host: " + address + "\r\n")
+	c.flusher.WriteString("CONNECT " + address + " HTTP/1.1\r\n")
+	c.flusher.WriteString("Host: " + address + "\r\n")
 
 	if c.authorization != "" {
-		therequest.WriteString("Proxy-Authorization: Basic " + c.authorization + "\r\n")
+		c.flusher.WriteString("Proxy-Authorization: Basic " + c.authorization + "\r\n")
 	}
-
-	therequest.WriteString("\r\n")
-	if _, err := c.flusher.Write(therequest.B); err != nil {
-		c.Close()
-		return &RegnError{Message: "field proxy connection with '" + address + "' address"}
-	}
+	c.flusher.WriteString("\r\n")
 
 	if err := c.flusher.Flush(); err != nil {
 		c.Close()
-		return &RegnError{Message: "field proxy connection with '" + address + "' address"}
+		return &RegnError{Message: "field proxy connection with '" + address + "' address (Flush)"}
 	}
-	therequest.Reset()
-	bufferPool.Put(therequest)
 
 	if raw, err := c.peeker.Peek(20); err != nil {
-		return &RegnError{Message: "field proxy connection with '" + address + "' address"}
+		return &RegnError{Message: "field proxy connection with '" + address + "' address (Peek)"}
 	} else {
 		if !bytes.Contains(raw, []byte("HTTP/1.1 200")) {
 			c.Close()
-			return &RegnError{Message: "field proxy connection with '" + address + "' address"}
+			return &RegnError{Message: "field proxy connection with '" + address + "' address (Contains)"}
 		}
 		c.peeker.Discard(c.peeker.Buffered())
 	}

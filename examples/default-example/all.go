@@ -4,6 +4,7 @@ package main
 import (
 	"fmt"
 	"sync"
+	"time"
 
 	regn "github.com/xsxo/regnhttp"
 )
@@ -13,8 +14,8 @@ func Example() {
 	clt := regn.Client{}
 
 	// set timeout connection
-	clt.Timeout = 20 // not required
-	clt.TimeoutRead = 20
+	clt.Timeout = time.Duration(20 * time.Second) // not required
+	clt.TimeoutRead = time.Duration(20 * time.Second)
 
 	// to set proxy connection
 	// clt.Proxy("http://username:password@host:port")

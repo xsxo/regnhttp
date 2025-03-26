@@ -3,6 +3,7 @@ package regn
 import (
 	"strconv"
 	"testing"
+	"time"
 )
 
 func TestEmptyResponse(T *testing.T) {
@@ -37,8 +38,8 @@ func TestReadingResponse(T *testing.T) {
 	}
 
 	clt := Client{
-		Timeout:     10,
-		TimeoutRead: 10,
+		Timeout:     time.Duration(20 * time.Second),
+		TimeoutRead: time.Duration(20 * time.Second),
 	}
 
 	if err := clt.Connect(req); err != nil {

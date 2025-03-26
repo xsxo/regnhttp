@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	regn "github.com/xsxo/regnhttp"
 )
@@ -30,7 +31,7 @@ func main() {
 	cn.Http2Upgrade()
 
 	// set timeout (not required)
-	cn.Timeout = 40
+	cn.Timeout = time.Duration(20 * time.Second)
 
 	// set proxy (not required)
 	proxy := "127.0.0.1:9911"

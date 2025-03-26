@@ -3,6 +3,7 @@ package regn
 import (
 	"crypto/tls"
 	"testing"
+	"time"
 )
 
 func TestConnectFunction(T *testing.T) {
@@ -11,8 +12,8 @@ func TestConnectFunction(T *testing.T) {
 	req.SetURL("https://localhost:9911/")
 
 	clt := Client{
-		Timeout:     10,
-		TimeoutRead: 10,
+		Timeout:     time.Duration(20 * time.Second),
+		TimeoutRead: time.Duration(20 * time.Second),
 		TLSConfig:   &tls.Config{InsecureSkipVerify: true},
 	}
 
