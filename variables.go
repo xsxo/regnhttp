@@ -24,7 +24,7 @@ var (
 	// lenRegex         *regexp.Regexp = regexp.MustCompile(`Content-Length: (\d+)`)
 	contentLengthKey []byte = []byte("Content-Length: ")
 
-	lines     []byte = []byte{48, 13, 10, 13, 10}
+	lines     []byte = []byte{13, 10, 48, 13, 10, 13, 10}
 	SpaceByte []byte = []byte(" ")
 )
 

@@ -113,8 +113,8 @@ func (REQ *RequestType) Http2Upgrade() {
 		REQ.Header.hpackHeaders = append(REQ.Header.hpackHeaders, hpack.HeaderField{Name: ":scheme", Value: "https"})
 		REQ.Header.hpackHeaders = append(REQ.Header.hpackHeaders, hpack.HeaderField{Name: ":authority", Value: REQ.Header.myhost})
 
-		HeadersLines := bytes.Split(REQ.Header.raw.B, lines[3:])
-		HeadersLines = HeadersLines[1:]
+		HeadersLines := bytes.Split(REQ.Header.raw.B, lines[5:])
+		HeadersLines = HeadersLines[3:]
 
 		for _, xo := range HeadersLines {
 			Head := bytes.Split(xo, []byte(": "))
@@ -127,7 +127,7 @@ func (REQ *RequestType) Http2Upgrade() {
 
 		HeadersLines = nil
 
-		FullRequest := bytes.Split(REQ.Header.raw.B, lines[1:])
+		FullRequest := bytes.Split(REQ.Header.raw.B, lines[3:])
 		REQ.Header.raw.Reset()
 
 		for _, Head := range REQ.Header.hpackHeaders {
@@ -160,13 +160,11 @@ func (REQ *RequestType) SetMethod(METHOD string) {
 		TheMethod := []byte(strings.ToUpper(METHOD))
 		SplitLines := bytes.Split(REQ.Header.raw.B, SpaceByte)
 		SplitLines[0] = TheMethod
-		TheMethod = nil
 
 		newRequest := bytes.Join(SplitLines, SpaceByte)
 
 		REQ.Header.raw.Reset()
 		REQ.Header.raw.Write(newRequest)
-		newRequest = nil
 	}
 }
 
@@ -262,7 +260,7 @@ func (REQ *ConnectionInformation) Set(key string, value string) {
 
 	} else {
 		REQ.Del(key)
-		reqLineEnd := bytes.Index(REQ.raw.B, lines[3:])
+		reqLineEnd := bytes.Index(REQ.raw.B, lines[5:])
 		if reqLineEnd != -1 {
 			insertPos := reqLineEnd + 2
 			REQ.raw.B = append(REQ.raw.B[:insertPos], append([]byte(key+": "+value+"\r\n"), REQ.raw.B[insertPos:]...)...)
@@ -284,7 +282,7 @@ func (REQ *ConnectionInformation) Del(key string) {
 	} else {
 		start := bytes.Index(REQ.raw.B, []byte(key))
 		if start != -1 {
-			end := bytes.Index(REQ.raw.B[start:], []byte(lines[3:]))
+			end := bytes.Index(REQ.raw.B[start:], []byte(lines[5:]))
 			end += start + 2
 			REQ.raw.B = append(REQ.raw.B[:start], REQ.raw.B[end:]...)
 		}
@@ -297,7 +295,7 @@ func (REQ *RequestType) SetBody(RawBody []byte) {
 		REQ.Header.rawBody.Write(RawBody)
 	} else {
 		REQ.Header.Del("Content-Length")
-		sepIndex := bytes.Index(REQ.Header.raw.B, lines[1:])
+		sepIndex := bytes.Index(REQ.Header.raw.B, lines[3:])
 		lened := formatInt(len(RawBody))
 		REQ.Header.raw.B = append(REQ.Header.raw.B[:sepIndex], []byte("Content-Length: "+lened+"\r\n\r\n")...)
 		REQ.Header.raw.B = append(REQ.Header.raw.B[:sepIndex+20+len(lened)], []byte(RawBody)...)
@@ -313,7 +311,7 @@ func (REQ *RequestType) SetBodyString(RawBody string) {
 
 	} else {
 		REQ.Header.Del("Content-Length")
-		sepIndex := bytes.Index(REQ.Header.raw.B, lines[1:])
+		sepIndex := bytes.Index(REQ.Header.raw.B, lines[3:])
 		lened := formatInt(len(RawBody))
 		REQ.Header.raw.B = append(REQ.Header.raw.B[:sepIndex+2], []byte("Content-Length: "+lened+"\r\n\r\n")...)
 		REQ.Header.raw.B = append(REQ.Header.raw.B[:sepIndex+22+len(lened)], []byte(RawBody)...)

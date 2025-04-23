@@ -97,11 +97,11 @@ func (RES *ResponseType) Body() []byte {
 	if RES.Header.upgraded {
 		return RES.Header.theBuffer.B
 	} else {
-		idx := bytes.Index(RES.Header.theBuffer.B, lines[1:])
+		idx := bytes.Index(RES.Header.theBuffer.B, lines[3:])
 		if idx == -1 {
 			return nil
 		}
-		start := idx + len(lines[1:])
+		start := idx + len(lines[3:])
 		if start >= len(RES.Header.theBuffer.B) {
 			return nil
 		}

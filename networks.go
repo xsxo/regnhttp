@@ -769,7 +769,7 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 				}
 			}
 
-			index := bytes.Index(RES.Header.theBuffer.B, lines[1:])
+			index := bytes.Index(RES.Header.theBuffer.B, lines[3:])
 			if index > 0 {
 				bodySize = len(RES.Header.theBuffer.B[index+4:])
 			}
@@ -789,6 +789,7 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 		if contentLength != 0 && contentLength <= bodySize {
 			break
 		} else if bytes.Contains(RES.Header.theBuffer.B, lines) {
+			RES.Header.theBuffer.B = RES.Header.theBuffer.B[:len(RES.Header.theBuffer.B)-7]
 			break
 		}
 	}

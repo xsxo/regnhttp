@@ -56,6 +56,8 @@
 - Change `NetConnection` of Client object to public
 - Change Timeout type from int to time.Duration
 
-# v1.12.0 (25/4/20)
-- Set TimeoutRead && Timeout for one time
-- 
+# v1.12.0 (25/4/23)
+- Change TimeoutRead && Timeout to static
+- Improve SetBody && SetBodyString algorithm
+- Improve Reading HTTP/1.1 response
+- Support HTTP/1.0 proxies
