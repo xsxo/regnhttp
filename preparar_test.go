@@ -9,6 +9,7 @@ var req *RequestType
 
 func prepare_request() {
 	req = Request()
+	req.SetMethod(MethodGet)
 	req.SetURL("https://localhost/api")
 	req.Header.Set("Message1", "REGN HTTP v0.0.0-rc @xsxo - GitHub.com")
 	req.Header.Set("Message2", "REGN HTTP v0.0.0-rc @xsxo - GitHub.com")
@@ -22,10 +23,7 @@ func clear_request() {
 }
 
 func Test_SetHeaders(t *testing.T) {
-	if req == nil {
-		prepare_request()
-	}
-
+	prepare_request()
 	if !bytes.Contains(req.Header.raw.B, []byte(" /api ")) {
 		t.Error("error when prepare RequestType.SetURL function")
 	} else if !bytes.Contains(req.Header.raw.B, []byte("Message1: ")) {
@@ -39,7 +37,6 @@ func Test_SetHeaders(t *testing.T) {
 	}
 
 	clear_request()
-
 	if bytes.Contains(req.Header.raw.B, []byte("Message1: ")) {
 		t.Error("error when prepare RequestType.Header.Del function")
 	} else if bytes.Contains(req.Header.raw.B, []byte("Message2: ")) {

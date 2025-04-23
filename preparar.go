@@ -292,19 +292,6 @@ func (REQ *ConnectionInformation) Del(key string) {
 func (REQ *RequestType) SetBody(RawBody []byte) {
 	if REQ.Header.hpackHeaders != nil {
 		REQ.Header.rawBody.Reset()
-		REQ.Header.rawBody.Write(RawBody)
-	} else {
-		REQ.Header.Del("Content-Length")
-		sepIndex := bytes.Index(REQ.Header.raw.B, lines[3:])
-		lened := formatInt(len(RawBody))
-		REQ.Header.raw.B = append(REQ.Header.raw.B[:sepIndex], []byte("Content-Length: "+lened+"\r\n\r\n")...)
-		REQ.Header.raw.B = append(REQ.Header.raw.B[:sepIndex+20+len(lened)], []byte(RawBody)...)
-	}
-}
-
-func (REQ *RequestType) SetBodyString(RawBody string) {
-	if REQ.Header.hpackHeaders != nil {
-		REQ.Header.rawBody.Reset()
 		RawByte := []byte(RawBody)
 		REQ.Header.rawBody.Write(RawByte)
 		RawByte = nil
@@ -316,6 +303,10 @@ func (REQ *RequestType) SetBodyString(RawBody string) {
 		REQ.Header.raw.B = append(REQ.Header.raw.B[:sepIndex+2], []byte("Content-Length: "+lened+"\r\n\r\n")...)
 		REQ.Header.raw.B = append(REQ.Header.raw.B[:sepIndex+22+len(lened)], []byte(RawBody)...)
 	}
+}
+
+func (REQ *RequestType) SetBodyString(RawBody string) {
+	REQ.SetBody([]byte(RawBody))
 }
 
 func (REQ *RequestType) SetJson(RawJson map[string]string) error {
