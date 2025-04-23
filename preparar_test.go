@@ -18,7 +18,7 @@ func prepare_request() {
 func clear_request() {
 	req.Header.Del("Message1")
 	req.Header.Remove("Message2")
-	req.SetBody([]byte(""))
+	req.SetBody(nil)
 }
 
 func Test_SetHeaders(t *testing.T) {
