@@ -87,7 +87,7 @@ func (c *Client) Http2Upgrade() {
 
 func (c *Client) connectNet(host string, port string) error {
 	if c.Timeout.Seconds() == 0 {
-		c.Timeout = time.Duration(10 * time.Second)
+		c.Timeout = time.Duration(20 * time.Second)
 	}
 
 	if c.TimeoutRead.Seconds() == 0 {
@@ -110,10 +110,9 @@ func (c *Client) connectNet(host string, port string) error {
 		return &RegnError{Message: "field create connection with '" + host + ":" + port + "' address\n" + err.Error()}
 	}
 	c.NetConnection.SetReadDeadline(time.Now().Add(c.TimeoutRead))
-	c.Timeout = time.Duration(0 * time.Second)
-	c.TimeoutRead = time.Duration(0 * time.Second)
+	// c.Timeout = time.Duration(0 * time.Second)
+	// c.TimeoutRead = time.Duration(0 * time.Second)
 	c.createLines()
-	err = nil
 	return nil
 }
 
@@ -131,10 +130,10 @@ func (c *Client) connectHost(address string) error {
 		return &RegnError{Message: "field proxy connection with '" + address + "' address (Flush)"}
 	}
 
-	if raw, err := c.peeker.Peek(20); err != nil {
+	if raw, err := c.peeker.Peek(16); err != nil {
 		return &RegnError{Message: "field proxy connection with '" + address + "' address (Peek)"}
 	} else {
-		if !bytes.Contains(raw, []byte("HTTP/1.1 200")) {
+		if !bytes.Contains(raw, []byte("200")) {
 			c.Close()
 			return &RegnError{Message: "field proxy connection with '" + address + "' address (Contains)"}
 		}
@@ -515,10 +514,10 @@ func (c *Client) Http2ReadRespone(RES *ResponseType, StreamID uint32) error {
 		RES.Http2Upgrade()
 	}
 
-	if c.TimeoutRead.Seconds() != 0 {
-		c.NetConnection.SetReadDeadline(time.Now().Add(c.TimeoutRead))
-		c.TimeoutRead = time.Duration(0 * time.Second)
-	}
+	// if c.TimeoutRead.Seconds() != 0 {
+	// 	c.NetConnection.SetReadDeadline(time.Now().Add(c.TimeoutRead))
+	// 	c.TimeoutRead = time.Duration(0 * time.Second)
+	// }
 
 	c.run = true
 	RES.Header.theHeader.Reset()
@@ -719,10 +718,10 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 		return err
 	}
 
-	if c.TimeoutRead.Seconds() != 0 {
-		c.NetConnection.SetReadDeadline(time.Now().Add(c.TimeoutRead))
-		c.TimeoutRead = time.Duration(0 * time.Second)
-	}
+	// if c.TimeoutRead.Seconds() != 0 {
+	// 	c.NetConnection.SetReadDeadline(time.Now().Add(c.TimeoutRead))
+	// 	c.TimeoutRead = time.Duration(0 * time.Second)
+	// }
 
 	c.run = true
 
@@ -745,31 +744,52 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 	}
 
 	RES.Header.theBuffer.Reset()
+	var bodySize int
+	var contentLength int
 	for {
-		if _, err := c.peeker.Peek(1); err != nil {
-			c.Close()
-			return err
-		}
-		le := c.peeker.Buffered()
-		raw, _ := c.peeker.Peek(le)
-
-		c.peeker.Discard(le)
-		RES.Header.theBuffer.Write(raw)
-		raw = nil
-
-		if bytes.Contains(RES.Header.theBuffer.B, lines[1:]) {
-			contentLengthMatch := lenRegex.FindSubmatch(RES.Header.theBuffer.B)
-			if len(contentLengthMatch) > 1 {
-				contentLength, _ := strconv.Atoi(string(contentLengthMatch[1]))
-				contentLengthMatch[0] = nil
-				contentLengthMatch[1] = nil
-
-				if len(bytes.SplitN(RES.Header.theBuffer.B, lines[1:], 2)[1]) >= contentLength {
-					break
-				}
-			} else if bytes.Contains(RES.Header.theBuffer.B, lines) {
-				break
+		if contentLength == 0 {
+			if _, err := c.peeker.Peek(1); err != nil {
+				c.Close()
+				return err
 			}
+			le := c.peeker.Buffered()
+			raw, _ := c.peeker.Peek(le)
+			c.peeker.Discard(le)
+			RES.Header.theBuffer.Write(raw)
+
+			idx := bytes.Index(raw, contentLengthKey)
+			if idx > 0 {
+				i := idx + len(contentLengthKey)
+				for ; i < len(RES.Header.theBuffer.B); i++ {
+					c := RES.Header.theBuffer.B[i]
+					if c < '0' || c > '9' {
+						break
+					}
+					contentLength = contentLength*10 + int(c-'0')
+				}
+			}
+
+			index := bytes.Index(RES.Header.theBuffer.B, lines[1:])
+			if index > 0 {
+				bodySize = len(RES.Header.theBuffer.B[index+4:])
+			}
+		} else {
+			raw, err := c.peeker.Peek(contentLength - bodySize)
+			if err != nil {
+				c.Close()
+				return err
+			}
+
+			lened := len(raw)
+			c.peeker.Discard(lened)
+			RES.Header.theBuffer.Write(raw)
+			bodySize += lened
+		}
+
+		if contentLength != 0 && contentLength <= bodySize {
+			break
+		} else if bytes.Contains(RES.Header.theBuffer.B, lines) {
+			break
 		}
 	}
 

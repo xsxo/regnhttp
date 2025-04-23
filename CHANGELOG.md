@@ -50,7 +50,12 @@
 # v1.10.0 (25/1/30)
 - Fix established proxy
 
-# v1.11.0 (25/1/30)
+# v1.11.0 (25/3/26)
 - Change raw established request
 - Fix ReadDedline (read timeout)
 - Change `NetConnection` of Client object to public
+- Change Timeout type from int to time.Duration
+
+# v1.12.0 (25/4/20)
+- Set TimeoutRead && Timeout for one time
+- 

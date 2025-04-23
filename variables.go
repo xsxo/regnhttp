@@ -21,7 +21,8 @@ var (
 	statusRegex *regexp.Regexp = regexp.MustCompile(`HTTP/1.1 (\d{3})`)
 	reasonRegex *regexp.Regexp = regexp.MustCompile(`HTTP/1.1 (\d{3} .*)`)
 
-	lenRegex *regexp.Regexp = regexp.MustCompile(`Content-Length: (\d+)`)
+	// lenRegex         *regexp.Regexp = regexp.MustCompile(`Content-Length: (\d+)`)
+	contentLengthKey []byte = []byte("Content-Length: ")
 
 	lines     []byte = []byte{48, 13, 10, 13, 10}
 	SpaceByte []byte = []byte(" ")
@@ -62,4 +63,27 @@ func genFlusher(writer io.Writer) *bufio.Writer {
 	nww, _ := nw.(*bufio.Writer)
 	nww.Reset(writer)
 	return nww
+}
+
+func formatInt(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	neg := n < 0
+	if neg {
+		n = -n
+	}
+	buf := [20]byte{}
+	i := len(buf)
+
+	for n > 0 {
+		i--
+		buf[i] = byte('0' + n%10)
+		n /= 10
+	}
+	if neg {
+		i--
+		buf[i] = '-'
+	}
+	return string(buf[i:])
 }

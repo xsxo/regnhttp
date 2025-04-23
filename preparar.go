@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/url"
-	"strconv"
 	"strings"
 
 	"github.com/valyala/bytebufferpool"
@@ -76,7 +75,7 @@ func (REQ *RequestType) HttpDowngrade() {
 		}
 
 		if REQ.Header.rawBody.Len() != 0 {
-			length := strconv.Itoa(REQ.Header.rawBody.Len())
+			length := formatInt(REQ.Header.rawBody.Len())
 			REQ.Header.raw.WriteString("Content-Length: " + length + "\r\n")
 		}
 
@@ -232,12 +231,9 @@ func (REQ *RequestType) SetURL(Url string) {
 
 		SplitLines[1] = api
 		newRequest := bytes.Join(SplitLines, SpaceByte)
-		api = nil
 
 		REQ.Header.raw.Reset()
 		REQ.Header.raw.Write(newRequest)
-
-		newRequest = nil
 
 		REQ.Header.Set("Host", REQ.Header.myhost)
 	}
@@ -265,31 +261,12 @@ func (REQ *ConnectionInformation) Set(key string, value string) {
 		}
 
 	} else {
-		data := REQ.raw.B
-		lowerSearch := []byte(strings.ToLower(key + ": "))
-		lowerData := bytes.ToLower(data)
-
-		start := bytes.Index(lowerData, lowerSearch)
-		lowerSearch = nil
-
-		if start != -1 {
-			end := bytes.Index(lowerData[start:], lines[3:])
-			end += start + 2
-			data = append(data[:start], data[end:]...)
-		} else {
-			start = bytes.Index(lowerData, lines[3:]) + 2
+		REQ.Del(key)
+		reqLineEnd := bytes.Index(REQ.raw.B, lines[3:])
+		if reqLineEnd != -1 {
+			insertPos := reqLineEnd + 2
+			REQ.raw.B = append(REQ.raw.B[:insertPos], append([]byte(key+": "+value+"\r\n"), REQ.raw.B[insertPos:]...)...)
 		}
-
-		newHeader := []byte(key + ": " + value + "\r\n")
-
-		data = append(data[:start], append(newHeader, data[start:]...)...)
-		newHeader = nil
-
-		REQ.raw.Reset()
-		REQ.raw.Write(data)
-
-		lowerData = nil
-		data = nil
 	}
 }
 
@@ -305,24 +282,12 @@ func (REQ *ConnectionInformation) Del(key string) {
 			}
 		}
 	} else {
-		data := REQ.raw.B
-		lowerSearch := []byte(strings.ToLower(key + ": "))
-		lowerData := bytes.ToLower(data)
-
-		start := bytes.Index(lowerData, lowerSearch)
-		lowerSearch = nil
-
+		start := bytes.Index(REQ.raw.B, []byte(key))
 		if start != -1 {
-			end := bytes.Index(lowerData[start:], lines[3:])
-			lowerData = nil
-
+			end := bytes.Index(REQ.raw.B[start:], []byte(lines[3:]))
 			end += start + 2
-			data = append(data[:start], data[end:]...)
-
-			REQ.raw.Reset()
-			REQ.raw.Write(data)
+			REQ.raw.B = append(REQ.raw.B[:start], REQ.raw.B[end:]...)
 		}
-		data = nil
 	}
 }
 
@@ -331,39 +296,12 @@ func (REQ *RequestType) SetBody(RawBody []byte) {
 		REQ.Header.rawBody.Reset()
 		REQ.Header.rawBody.Write(RawBody)
 	} else {
-		splitLines := bytes.Split(REQ.Header.raw.B, lines[1:])
-
-		splitLines[1] = RawBody
-		LenBody := len(RawBody)
-		RawBody = nil
-
-		newRequest := bytes.Join(splitLines, lines[1:])
-
-		lowerSearch := []byte(strings.ToLower("Content-Length: "))
-		lowerData := bytes.ToLower(newRequest)
-
-		start := bytes.Index(lowerData, lowerSearch)
-		lowerSearch = nil
-		if start != -1 {
-			end := bytes.Index(lowerData[start:], lines[3:])
-			end += start + 2
-			newRequest = append(newRequest[:start], newRequest[end:]...)
-		} else {
-			start = bytes.Index(lowerData, lines[3:]) + 2
-		}
-
-		newHeader := []byte("Content-Length: " + strconv.Itoa(LenBody) + "\r\n")
-
-		newRequest = append(newRequest[:start], append(newHeader, newRequest[start:]...)...)
-		newHeader = nil
-
-		REQ.Header.raw.Reset()
-		REQ.Header.raw.Write(newRequest)
-
-		lowerData = nil
-		newRequest = nil
+		REQ.Header.Del("Content-Length")
+		sepIndex := bytes.Index(REQ.Header.raw.B, lines[1:])
+		lened := formatInt(len(RawBody))
+		REQ.Header.raw.B = append(REQ.Header.raw.B[:sepIndex], []byte("Content-Length: "+lened+"\r\n\r\n")...)
+		REQ.Header.raw.B = append(REQ.Header.raw.B[:sepIndex+20+len(lened)], []byte(RawBody)...)
 	}
-
 }
 
 func (REQ *RequestType) SetBodyString(RawBody string) {
@@ -374,36 +312,11 @@ func (REQ *RequestType) SetBodyString(RawBody string) {
 		RawByte = nil
 
 	} else {
-		splitLines := bytes.Split(REQ.Header.raw.B, lines[1:])
-
-		splitLines[1] = []byte(RawBody)
-		LenBody := len(RawBody)
-
-		newRequest := bytes.Join(splitLines, lines[1:])
-
-		lowerSearch := []byte(strings.ToLower("Content-Length" + ": "))
-		lowerData := bytes.ToLower(newRequest)
-
-		start := bytes.Index(lowerData, lowerSearch)
-		lowerSearch = nil
-		if start != -1 {
-			end := bytes.Index(lowerData[start:], lines[1:])
-			end += start + 2
-			newRequest = append(newRequest[:start], newRequest[end:]...)
-		} else {
-			start = bytes.Index(lowerData, lines[1:]) + 2
-		}
-
-		newHeader := []byte("Content-Length" + ": " + strconv.Itoa(LenBody) + "\r\n")
-
-		newRequest = append(newRequest[:start], append(newHeader, newRequest[start:]...)...)
-		newHeader = nil
-
-		REQ.Header.raw.Reset()
-		REQ.Header.raw.Write(newRequest)
-
-		lowerData = nil
-		newRequest = nil
+		REQ.Header.Del("Content-Length")
+		sepIndex := bytes.Index(REQ.Header.raw.B, lines[1:])
+		lened := formatInt(len(RawBody))
+		REQ.Header.raw.B = append(REQ.Header.raw.B[:sepIndex+2], []byte("Content-Length: "+lened+"\r\n\r\n")...)
+		REQ.Header.raw.B = append(REQ.Header.raw.B[:sepIndex+22+len(lened)], []byte(RawBody)...)
 	}
 }
 

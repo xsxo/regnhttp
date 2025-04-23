@@ -90,31 +90,22 @@ func (RES *ResponseType) Reason() string {
 }
 
 func (RES *ResponseType) BodyString() string {
-	if RES.Header.upgraded {
-		return RES.Header.theBuffer.String()
-	} else {
-		out := strings.SplitN(RES.Header.theBuffer.String(), "\r\n\r\n", 2)
-		if len(out) < 2 {
-			return ""
-		}
-
-		out[0] = ""
-		return out[1]
-	}
+	return string(RES.Body())
 }
 
 func (RES *ResponseType) Body() []byte {
 	if RES.Header.upgraded {
 		return RES.Header.theBuffer.B
 	} else {
-		splied := bytes.SplitN(RES.Header.theBuffer.B, lines[1:], 2)
-
-		if len(splied) < 2 {
+		idx := bytes.Index(RES.Header.theBuffer.B, lines[1:])
+		if idx == -1 {
 			return nil
 		}
-
-		splied[0] = nil
-		return splied[1]
+		start := idx + len(lines[1:])
+		if start >= len(RES.Header.theBuffer.B) {
+			return nil
+		}
+		return RES.Header.theBuffer.B[start:]
 	}
 }
 

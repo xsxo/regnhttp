@@ -1,7 +1,6 @@
 package regn
 
 import (
-	"strconv"
 	"testing"
 	"time"
 )
@@ -15,7 +14,7 @@ func TestEmptyResponse(T *testing.T) {
 	} else if res.StatusCode() != 0 {
 		T.Error("Error: RES.StatusCode function")
 	} else if res.Reason() != "" {
-		T.Error("Error : " + strconv.Itoa(res.StatusCode()))
+		T.Error("Error : " + formatInt(res.StatusCode()))
 	} else if len(res.Header.GetAll()) != 0 {
 		T.Error("Error: header parsing -> REQ.Header.GetAll")
 	}
@@ -51,7 +50,7 @@ func TestReadingResponse(T *testing.T) {
 	}
 
 	if res.StatusCode() != 200 {
-		T.Error("Error StatusCode: " + strconv.Itoa(res.StatusCode()))
+		T.Error("Error StatusCode: " + formatInt(res.StatusCode()))
 	}
 
 	if res.Body() == nil {
