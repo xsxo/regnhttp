@@ -498,7 +498,7 @@ func (c *Client) Http2ReadRespone(RES *ResponseType) error {
 		}
 
 		payloadLength := int(binary.BigEndian.Uint32(append([]byte{0}, rawPlayload[0:3]...))) + 9
-		mathed = []int{payloadLength, 4096}[intToBool(payloadLength > 4096)]
+		mathed = []int{payloadLength, c.ReadBufferSize}[intToBool(payloadLength > c.ReadBufferSize)]
 		testStream -= uint32(payloadLength)
 		if payloadLength > mathed {
 			c.h2WinClient -= uint32(payloadLength - 9)
@@ -639,6 +639,7 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 	RES.Header.theBuffer.Reset()
 	var bodySize int
 	var contentLength int
+	var mathed int
 	for {
 		if contentLength == 0 {
 			if _, err := c.peeker.Peek(1); err != nil {
@@ -650,40 +651,48 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 			c.peeker.Discard(le)
 			RES.Header.theBuffer.Write(raw)
 
-			idx := bytes.Index(raw, contentLengthKey)
-			if idx > 0 {
-				i := idx + len(contentLengthKey)
-				for ; i < len(RES.Header.theBuffer.B); i++ {
-					c := RES.Header.theBuffer.B[i]
-					if c < '0' || c > '9' {
+			if bodySize == 0 {
+				index := bytes.Index(RES.Header.theBuffer.B, lines[3:])
+				if index > 0 {
+					bodySize = len(RES.Header.theBuffer.B[index+4:])
+				}
+
+				idx := bytes.Index(raw, contentLengthKey)
+				if idx > 0 {
+					i := idx + len(contentLengthKey)
+					for ; i < len(RES.Header.theBuffer.B); i++ {
+						c := RES.Header.theBuffer.B[i]
+						if c < '0' || c > '9' {
+							break
+						}
+						contentLength = contentLength*10 + int(c-'0')
+					}
+
+					if contentLength <= bodySize {
 						break
 					}
-					contentLength = contentLength*10 + int(c-'0')
 				}
+
+			} else if bytes.Contains(RES.Header.theBuffer.B, lines) {
+				RES.Header.theBuffer.B = RES.Header.theBuffer.B[:len(RES.Header.theBuffer.B)-7]
+				break
 			}
 
-			index := bytes.Index(RES.Header.theBuffer.B, lines[3:])
-			if index > 0 {
-				bodySize = len(RES.Header.theBuffer.B[index+4:])
-			}
 		} else {
-			raw, err := c.peeker.Peek(contentLength - bodySize)
+			mathed = []int{contentLength - bodySize, c.ReadBufferSize}[intToBool(contentLength-bodySize > c.ReadBufferSize)]
+			raw, err := c.peeker.Peek(mathed)
 			if err != nil {
 				c.Close()
 				return err
 			}
 
-			lened := len(raw)
-			c.peeker.Discard(lened)
 			RES.Header.theBuffer.Write(raw)
-			bodySize += lened
-		}
+			c.peeker.Discard(mathed)
+			bodySize += mathed
 
-		if contentLength != 0 && contentLength <= bodySize {
-			break
-		} else if bytes.Contains(RES.Header.theBuffer.B, lines) {
-			RES.Header.theBuffer.B = RES.Header.theBuffer.B[:len(RES.Header.theBuffer.B)-7]
-			break
+			if contentLength <= bodySize {
+				break
+			}
 		}
 	}
 

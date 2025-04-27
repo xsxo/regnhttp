@@ -1,9 +1,9 @@
 package regn
 
 const (
-	Version     string = "v1.13.0"
-	Name        string = "REGN HTTP"
+	Version     string = "v1.14.0"
+	Name        string = "REGNHTTP"
 	Author      string = "@xsxo GITHUB"
 	License     string = "Apache-2.0"
-	Description string = "High Performance HTTP Client GoLang Packge"
+	Description string = "High Performance HTTP GoLang Client"
 )

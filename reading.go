@@ -112,7 +112,7 @@ func (RES *ResponseType) Body() []byte {
 	}
 }
 
-func (RES *ResponseType) Json() (map[string]interface{}, error) {
+func (RES *ResponseType) BodyJson() (map[string]interface{}, error) {
 	NewErr := &RegnError{}
 
 	var result map[string]interface{}

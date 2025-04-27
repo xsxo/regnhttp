@@ -1,6 +1,7 @@
 package regn
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -52,6 +53,7 @@ func Test_HTTP1_1(t *testing.T) {
 	if err := c.Do(r, s); err != nil {
 		t.Error("Do function 3")
 	} else if !strings.Contains(s.BodyString(), `</html>`) {
+		fmt.Println(s.BodyString())
 		t.Error("Reading Html Page")
 	}
 

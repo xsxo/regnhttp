@@ -21,7 +21,6 @@ var (
 	statusRegex *regexp.Regexp = regexp.MustCompile(`HTTP/1.1 (\d{3})`)
 	reasonRegex *regexp.Regexp = regexp.MustCompile(`HTTP/1.1 (\d{3} .*)`)
 
-	// lenRegex         *regexp.Regexp = regexp.MustCompile(`Content-Length: (\d+)`)
 	contentLengthKey []byte = []byte("Content-Length: ")
 
 	lines     []byte = []byte{13, 10, 48, 13, 10, 13, 10}
