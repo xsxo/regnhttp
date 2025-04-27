@@ -187,13 +187,12 @@ func (c *Client) Close() {
 	if new, ok := c.NetConnection.(*tls.Conn); ok {
 		if new != nil {
 			new.Close()
+			c.NetConnection.Close()
 			c.NetConnection = nil
-			c.hostConnected = ""
 		}
 	} else {
 		if c.NetConnection != nil {
 			c.NetConnection.Close()
-			c.hostConnected = ""
 			c.NetConnection = nil
 		}
 	}
@@ -206,7 +205,8 @@ func (c *Client) Close() {
 	}
 
 	c.closeLines()
-	c.h2PrvStreams = 0
+	c.hostConnected = ""
+	c.h2PrvStreams = 1
 	c.h2WinServer = 0
 	c.h2FrameSize = 0
 	c.h2Streams = 0
@@ -266,7 +266,6 @@ func (c *Client) Connect(REQ *RequestType) error {
 
 	if c.hostConnected == "" {
 		c.TLSConfig.ServerName = REQ.Header.myhost
-
 		if c.upgraded {
 			c.TLSConfig.NextProtos = []string{"h2"}
 		}
@@ -390,9 +389,7 @@ func (c *Client) Http2WriteRequest(REQ *RequestType, RES *ResponseType) error {
 	payloadLengthHeaders := uint32(REQ.Header.raw.Len())
 	payloadLengthBody := uint32(REQ.Header.rawBody.Len())
 
-	if c.h2WinServer < payloadLengthBody {
-		return &RegnError{"data > window server size"}
-	} else if RES.Header.StreamId != 0 && !RES.Header.completed {
+	if RES.Header.StreamId != 0 && !RES.Header.completed {
 		return &RegnError{"the respone object is associated with a uncompleted request boject"}
 	}
 
@@ -403,6 +400,8 @@ func (c *Client) Http2WriteRequest(REQ *RequestType, RES *ResponseType) error {
 	} else if c.h2Streams == 0 {
 		c.lock.Unlock()
 		return &RegnError{"concurrent streams id"}
+	} else if c.h2WinServer < payloadLengthBody {
+		return &RegnError{"data > window server size"}
 	}
 
 	c.h2PrvStreams += 2
