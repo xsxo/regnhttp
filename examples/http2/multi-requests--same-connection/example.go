@@ -43,7 +43,7 @@ func main() {
 		if err := c.Http2ReadRespone(s); err != nil {
 			panic(err)
 		}
-		json, err := s.Json()
+		json, err := s.BodyJson()
 		if err != nil {
 			panic(err)
 		}

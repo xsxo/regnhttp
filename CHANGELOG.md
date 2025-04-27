@@ -68,3 +68,9 @@
 - Change stream id argument to auto stream id
 - Change Name function `Http2SendRequest` to `Http2WriteRequest`
 - New Tests Files && New Examples Files
+
+# v1.14.0 (25/4/28)
+- Fix Buffer Full at bufio.Reader
+- Change name Json() function to BodyJson()
+- Added benchmark http1.1
+- New `README.md` File

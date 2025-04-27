@@ -66,7 +66,7 @@ func Example() {
 	fmt.Println(res.BodyString())
 
 	// read json response
-	Json, err := res.Json()
+	Json, err := res.BodyJson()
 
 	if err != nil {
 		panic("Err: " + err.Error())

@@ -61,7 +61,7 @@ func TestReadingResponse(T *testing.T) {
 		T.Error("Error: RES.BodyString function")
 	}
 
-	JsonRES, Err := res.Json()
+	JsonRES, Err := res.BodyJson()
 
 	if Err != nil {
 		T.Error("Error: parsing map to json -> RES.Json function")
