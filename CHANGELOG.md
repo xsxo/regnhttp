@@ -61,3 +61,10 @@
 - Improve SetBody && SetBodyString algorithm
 - Improve Reading HTTP/1.1 response
 - Support HTTP/1.0 proxies
+
+# v1.13.0 (25/4/27)
+- Added ReadBufferSize && WriteBufferSize
+- Imporve `Http2ReadResponse` function
+- Change stream id argument to auto stream id
+- Change Name function `Http2SendRequest` to `Http2WriteRequest`
+- New Tests Files && New Examples Files
