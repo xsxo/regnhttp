@@ -41,11 +41,11 @@ func (e *RegnError) Error() string {
 	return "regnhttp error: " + e.Message
 }
 
-func genPeeker(reader io.Reader) *bufio.Reader {
+func genPeeker(reader io.Reader, size int) *bufio.Reader {
 	nr := peekerPool.Get()
 
 	if nr == nil {
-		return bufio.NewReader(reader)
+		return bufio.NewReaderSize(reader, size)
 	}
 
 	nrr, _ := nr.(*bufio.Reader)
@@ -53,11 +53,11 @@ func genPeeker(reader io.Reader) *bufio.Reader {
 	return nrr
 }
 
-func genFlusher(writer io.Writer) *bufio.Writer {
+func genFlusher(writer io.Writer, size int) *bufio.Writer {
 	nw := flusherPool.Get()
 
 	if nw == nil {
-		return bufio.NewWriter(writer)
+		return bufio.NewWriterSize(writer, size)
 	}
 
 	nww, _ := nw.(*bufio.Writer)
@@ -86,4 +86,11 @@ func formatInt(n int) string {
 		buf[i] = '-'
 	}
 	return string(buf[i:])
+}
+
+func intToBool(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }

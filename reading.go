@@ -11,9 +11,12 @@ import (
 )
 
 type headStruct struct {
-	theBuffer bytebufferpool.ByteBuffer
-	theHeader bytebufferpool.ByteBuffer
-	upgraded  bool
+	theBuffer    bytebufferpool.ByteBuffer
+	theHeader    bytebufferpool.ByteBuffer
+	upgraded     bool
+	completed    bool
+	streamWindow uint32
+	StreamId     uint32
 }
 
 type ResponseType struct {

@@ -8,10 +8,8 @@ import (
 	"encoding/binary"
 	"net"
 	"net/url"
-	"strconv"
+	"sync"
 	"time"
-
-	"github.com/valyala/bytebufferpool"
 )
 
 type Client struct {
@@ -26,6 +24,12 @@ type Client struct {
 
 	// Dialer to create dial connection
 	Dialer *net.Dialer
+
+	// Buffer Size of Writer Requsts (default value is 4096)
+	WriteBufferSize int
+
+	// Buffer Size of Reader Responses (default value is 4096)
+	ReadBufferSize int
 
 	// Net connection of Client
 	NetConnection net.Conn
@@ -50,7 +54,8 @@ type Client struct {
 	portProxy     string
 	upgraded      bool
 
-	theBuffer *bytebufferpool.ByteBuffer
+	lock  sync.Mutex
+	h2Map map[uint32]*ResponseType
 }
 
 func (c *Client) Http2MaxStreams() uint32 {
@@ -81,8 +86,13 @@ func (c *Client) HttpDowngrade() {
 }
 
 func (c *Client) Http2Upgrade() {
-	c.Close()
-	c.upgraded = true
+	if !c.upgraded {
+		c.Close()
+		if c.h2PrvStreams == 0 {
+			c.h2PrvStreams++
+		}
+		c.upgraded = true
+	}
 }
 
 func (c *Client) connectNet(host string, port string) error {
@@ -110,8 +120,7 @@ func (c *Client) connectNet(host string, port string) error {
 		return &RegnError{Message: "field create connection with '" + host + ":" + port + "' address\n" + err.Error()}
 	}
 	c.NetConnection.SetReadDeadline(time.Now().Add(c.TimeoutRead))
-	// c.Timeout = time.Duration(0 * time.Second)
-	// c.TimeoutRead = time.Duration(0 * time.Second)
+
 	c.createLines()
 	return nil
 }
@@ -133,7 +142,7 @@ func (c *Client) connectHost(address string) error {
 	if raw, err := c.peeker.Peek(16); err != nil {
 		return &RegnError{Message: "field proxy connection with '" + address + "' address (Peek)"}
 	} else {
-		if !bytes.Contains(raw, []byte("200")) {
+		if !bytes.Contains(raw, []byte{50, 48, 48}) {
 			c.Close()
 			return &RegnError{Message: "field proxy connection with '" + address + "' address (Contains)"}
 		}
@@ -189,13 +198,14 @@ func (c *Client) Close() {
 		}
 	}
 
-	c.closeLines()
-	if c.theBuffer != nil {
-		c.theBuffer.Reset()
-		bufferPool.Put(c.theBuffer)
-		c.theBuffer = nil
+	if c.upgraded {
+		for key := range c.h2Map {
+			c.h2Map[key].Header.StreamId = 0
+			delete(c.h2Map, key)
+		}
 	}
 
+	c.closeLines()
 	c.h2PrvStreams = 0
 	c.h2WinServer = 0
 	c.h2FrameSize = 0
@@ -218,15 +228,23 @@ func (c *Client) closeLines() {
 func (c *Client) createLines() {
 	c.closeLines()
 
+	if c.ReadBufferSize == 0 {
+		c.ReadBufferSize = 4096
+	}
+
+	if c.WriteBufferSize == 0 {
+		c.WriteBufferSize = 4096
+	}
+
 	if new, ok := c.NetConnection.(*tls.Conn); ok {
 		if new != nil {
-			c.peeker = genPeeker(new)
-			c.flusher = genFlusher(new)
+			c.peeker = genPeeker(new, c.ReadBufferSize)
+			c.flusher = genFlusher(new, c.WriteBufferSize)
 		}
 	} else {
 		if c.NetConnection != nil {
-			c.peeker = genPeeker(c.NetConnection)
-			c.flusher = genFlusher(c.NetConnection)
+			c.peeker = genPeeker(c.NetConnection, c.ReadBufferSize)
+			c.flusher = genFlusher(c.NetConnection, c.WriteBufferSize)
 		}
 	}
 }
@@ -287,8 +305,8 @@ func (c *Client) Connect(REQ *RequestType) error {
 				panic("http2 protocol support https requests only; use https://")
 			}
 
-			if c.theBuffer == nil {
-				c.theBuffer = bufferPool.Get()
+			if c.h2Map == nil {
+				c.h2Map = make(map[uint32]*ResponseType)
 			}
 
 			if _, err := c.flusher.WriteString("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"); err != nil {
@@ -355,95 +373,41 @@ func (c *Client) Connect(REQ *RequestType) error {
 	return nil
 }
 
-func (c *Client) Http2SendHeaders(REQ *RequestType, StreamID uint32) error {
+// Support goroutine-safe
+func (c *Client) Http2WriteRequest(REQ *RequestType, RES *ResponseType) error {
 	if !c.upgraded {
 		c.Http2Upgrade()
 	}
 
-	if StreamID%2 == 0 {
-		panic("id is not odd")
-	} else if err := c.Connect(REQ); err != nil {
-		return err
-	} else if c.h2Streams == 0 {
-		return &RegnError{"concurrent streams id"}
-	} else if REQ.Header.hpackHeaders == nil {
+	if REQ.Header.hpackHeaders == nil {
 		REQ.Http2Upgrade()
 	}
 
-	payloadLengthHeaders := uint32(REQ.Header.raw.Len())
-
-	c.flusher.Write([]byte{
-		byte(payloadLengthHeaders >> 16), // len payload 3 bytes
-		byte(payloadLengthHeaders >> 8),  // len payload 3 bytes
-		byte(payloadLengthHeaders),       // len payload 3 bytes
-		0x1,                              // type of frame
-		0x4,                              // end stream (false) && end header (true)
-	})
-
-	binary.Write(c.flusher, binary.BigEndian, StreamID&0x7FFFFFFF) // stream id
-	c.flusher.Write(REQ.Header.raw.B)                              // payload
-
-	if err := c.flusher.Flush(); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (c *Client) Http2SendBody(REQ *RequestType, StreamID uint32) error {
-	if !c.upgraded {
-		c.Http2Upgrade()
-	}
-
-	if StreamID%2 == 0 {
-		panic("id is not odd")
-	} else if err := c.Connect(REQ); err != nil {
-		return err
-	} else if c.h2Streams == 0 {
-		return &RegnError{"concurrent streams id"}
-	}
-
-	payloadLengthBody := uint32(REQ.Header.rawBody.Len())
-
-	c.flusher.Write([]byte{
-		byte(payloadLengthBody >> 16), // len payload 3 bytes
-		byte(payloadLengthBody >> 8),  // len payload 3 bytes
-		byte(payloadLengthBody),       // len payload 3 bytes
-		0x0,                           // type of frame
-		0x1,                           // end stream (true)
-	})
-
-	binary.Write(c.flusher, binary.BigEndian, StreamID&0x7FFFFFFF) // stream id
-	c.flusher.Write(REQ.Header.rawBody.B)                          // payload
-
-	if err := c.flusher.Flush(); err != nil {
-		return err
-	}
-
-	c.h2WinServer -= payloadLengthBody
-	c.h2Streams--
-	return nil
-}
-
-func (c *Client) Http2SendRequest(REQ *RequestType, StreamID uint32) error {
-	if !c.upgraded {
-		c.Http2Upgrade()
+	if !RES.Header.upgraded {
+		RES.Http2Upgrade()
 	}
 
 	payloadLengthHeaders := uint32(REQ.Header.raw.Len())
 	payloadLengthBody := uint32(REQ.Header.rawBody.Len())
 
-	if StreamID%2 == 0 {
-		panic("id is not odd")
-	} else if err := c.Connect(REQ); err != nil {
-		return err
-	} else if c.h2Streams == 0 {
-		return &RegnError{"concurrent streams id"}
-	} else if c.h2WinServer < payloadLengthBody {
+	if c.h2WinServer < payloadLengthBody {
 		return &RegnError{"data > window server size"}
-	} else if REQ.Header.hpackHeaders == nil {
-		REQ.Http2Upgrade()
+	} else if RES.Header.StreamId != 0 && !RES.Header.completed {
+		return &RegnError{"the respone object is associated with a uncompleted request boject"}
 	}
+
+	c.lock.Lock()
+	if err := c.Connect(REQ); err != nil {
+		c.lock.Unlock()
+		return err
+	} else if c.h2Streams == 0 {
+		c.lock.Unlock()
+		return &RegnError{"concurrent streams id"}
+	}
+
+	c.h2PrvStreams += 2
+	StreamID := c.h2PrvStreams
+	c.h2Map[StreamID] = RES
 
 	c.flusher.Write([]byte{
 		byte(payloadLengthHeaders >> 16), // len payload 3 bytes
@@ -471,10 +435,15 @@ func (c *Client) Http2SendRequest(REQ *RequestType, StreamID uint32) error {
 		c.Close()
 		return err
 	}
+	c.lock.Unlock()
+
+	RES.Header.completed = false
+	RES.Header.theHeader.Reset()
+	RES.Header.theBuffer.Reset()
+	RES.Header.StreamId = StreamID
 
 	c.h2WinServer -= payloadLengthBody
 	c.h2Streams--
-
 	return nil
 }
 
@@ -488,7 +457,6 @@ func (c *Client) h2WindowUpdate() {
 	}
 
 	increment := c.h2PrvWinC - c.h2WinClient
-
 	c.flusher.Write([]byte{0x00, 0x00, 0x04})
 	c.flusher.WriteByte(0x8)
 	c.flusher.WriteByte(0x00)
@@ -498,171 +466,112 @@ func (c *Client) h2WindowUpdate() {
 	c.h2WinClient += increment
 }
 
-func (c *Client) Http2ReadRespone(RES *ResponseType, StreamID uint32) error {
-	if c.run {
-		panic("concurrent client goroutines")
-	} else if !c.upgraded {
-		c.Http2Upgrade()
-		return &RegnError{"http version is not http2"}
+// Support goroutine-safe
+func (c *Client) Http2ReadRespone(RES *ResponseType) error {
+	RES, EX := c.h2Map[RES.Header.StreamId]
+	if !EX {
+		return &RegnError{"the stream has been closed"}
 	}
 
-	if StreamID%2 == 0 {
-		panic("stream id is not odd")
-	} else if c.hostConnected == "" {
-		return &RegnError{"the connection has been closed"}
-	} else if !RES.Header.upgraded {
-		RES.Http2Upgrade()
-	}
-
-	// if c.TimeoutRead.Seconds() != 0 {
-	// 	c.NetConnection.SetReadDeadline(time.Now().Add(c.TimeoutRead))
-	// 	c.TimeoutRead = time.Duration(0 * time.Second)
-	// }
-
-	c.run = true
-	RES.Header.theHeader.Reset()
-	RES.Header.theBuffer.Reset()
-
-	data := make([]byte, 4)
-	binary.BigEndian.PutUint32(data, StreamID)
-
-	pending := 0
-	var privateWindow uint32 = 65535
+	RES.Header.streamWindow = 65535
 	var streamsWindow uint32 = 65535
-	var privateStream uint32 = StreamID
+	var testStream uint32 = 65535
+	var mathed int
 
-	for c.run {
-		indexRaw := bytes.Index(c.theBuffer.B, data) - 5
-
-		for indexRaw > -1 {
-			payloadLength := int(binary.BigEndian.Uint32(append([]byte{0}, c.theBuffer.B[indexRaw:indexRaw+3]...))) + 9 + indexRaw
-			if payloadLength > c.theBuffer.Len() {
-				break
-			}
-
-			switch c.theBuffer.B[indexRaw+3] {
-			case 0x0:
-				RES.Header.theBuffer.Write(c.theBuffer.B[indexRaw+9 : payloadLength])
-			case 0x1:
-				RES.Header.theHeader.Write(c.theBuffer.B[indexRaw+9 : payloadLength])
-			case 0x3:
-				c.run = false
-				c.theBuffer.B = append(c.theBuffer.B[:indexRaw], c.theBuffer.B[payloadLength:]...)
-				return &RegnError{"the stream id " + strconv.Itoa(int(StreamID)) + " has been canceled by the server"}
-			}
-
-			if c.theBuffer.B[indexRaw+4] == 0x1 { // || c.theBuffer.B[indexRaw+4] == 0x0
-				c.h2Streams++
-				c.theBuffer.B = append(c.theBuffer.B[:indexRaw], c.theBuffer.B[payloadLength:]...)
-				c.run = false
-				return nil
-			}
-
-			c.theBuffer.B = append(c.theBuffer.B[:indexRaw], c.theBuffer.B[payloadLength:]...)
-			indexRaw = bytes.Index(c.theBuffer.B, data) - 5
-		}
-
-		if streamsWindow > privateWindow || streamsWindow == 0 {
-			privateWindow = 6553555
+	c.lock.Lock()
+	for !RES.Header.completed {
+		if streamsWindow > RES.Header.streamWindow || streamsWindow == 0 {
+			RES.Header.streamWindow = 6553555
 			streamsWindow = 6553555
 			c.flusher.Write([]byte{0x00, 0x00, 0x04, 0x8, 0x00})
-			binary.Write(c.flusher, binary.BigEndian, uint32(privateStream))
+			binary.Write(c.flusher, binary.BigEndian, RES.Header.StreamId)
 			binary.Write(c.flusher, binary.BigEndian, uint32(6553555))
 			c.h2WindowUpdate()
 		} else if c.h2WinClient > c.h2PrvWinC || c.h2WinClient == 0 {
 			c.h2WindowUpdate()
 		}
 
-		if _, err := c.peeker.Peek(9); err != nil {
+		rawPlayload, err := c.peeker.Peek(9)
+		if err != nil {
 			c.Close()
+			c.lock.Unlock()
 			return err
 		}
 
-		buffered := c.peeker.Buffered()
-		raw, _ := c.peeker.Peek(buffered)
-		payloadLength := int(binary.BigEndian.Uint32(append([]byte{0}, raw[0:3]...))) + 9
-
-		if pending != 0 {
-			if buffered > pending {
-				c.peeker.Discard(pending)
-				c.theBuffer.Write(raw[:pending])
-				pending = 0
-				continue
-			} else {
-				pending -= buffered
-				c.theBuffer.Write(raw)
-				c.peeker.Discard(buffered)
-				continue
+		payloadLength := int(binary.BigEndian.Uint32(append([]byte{0}, rawPlayload[0:3]...))) + 9
+		mathed = []int{payloadLength, 4096}[intToBool(payloadLength > 4096)]
+		testStream -= uint32(payloadLength)
+		if payloadLength > mathed {
+			c.h2WinClient -= uint32(payloadLength - 9)
+			streamsWindow -= uint32(payloadLength - 9)
+			if streamsWindow > RES.Header.streamWindow || streamsWindow == 0 {
+				RES.Header.streamWindow = 6553555
+				streamsWindow = 6553555
+				c.flusher.Write([]byte{0x00, 0x00, 0x04, 0x8, 0x00})
+				binary.Write(c.flusher, binary.BigEndian, RES.Header.StreamId)
+				binary.Write(c.flusher, binary.BigEndian, uint32(6553555))
+				c.h2WindowUpdate()
+			} else if c.h2WinClient > c.h2PrvWinC || c.h2WinClient == 0 {
+				c.h2WindowUpdate()
 			}
 
-		} else if payloadLength > buffered {
+			Stream := binary.BigEndian.Uint32(rawPlayload[5:9]) & 0x7FFFFFFF
+			other := c.h2Map[Stream]
+			if rawPlayload[4] == 0x1 {
+				c.h2Streams++
+				other.Header.completed = true
+			}
 
-			if raw[3] == 0x0 {
-				Stream := binary.BigEndian.Uint32(raw[5:9]) & 0x7FFFFFFF
-				if privateStream != Stream {
-					streamsWindow = 65535
-					privateWindow = 65535
-					privateStream = Stream
+			for payloadLength != 0 {
+				raw, err := c.peeker.Peek(mathed)
+				if err != nil {
+					c.Close()
+					c.lock.Unlock()
+					return err
 				}
-
-				c.h2WinClient -= uint32(payloadLength - 9)
-				streamsWindow -= uint32(payloadLength - 9)
+				c.peeker.Discard(mathed)
+				other.Header.theBuffer.Write(raw)
+				payloadLength -= mathed
+				mathed = []int{payloadLength, 4096}[intToBool(payloadLength > 4096)]
 			}
-
-			pending = payloadLength - buffered
-			c.theBuffer.Write(raw)
-			c.peeker.Discard(buffered)
+			other.Header.theBuffer.B = other.Header.theBuffer.B[3:]
 			continue
 		}
 
+		raw, err := c.peeker.Peek(payloadLength)
+		if err != nil {
+			c.Close()
+			c.lock.Unlock()
+			return err
+		}
 		c.peeker.Discard(payloadLength)
 
 		switch raw[3] {
 		case 0x0:
 			Stream := binary.BigEndian.Uint32(raw[5:9]) & 0x7FFFFFFF
-			if privateStream != Stream {
-				streamsWindow = 65535
-				privateWindow = 65535
-				privateStream = Stream
-			}
-
+			other := c.h2Map[Stream]
 			c.h2WinClient -= uint32(payloadLength - 9)
 			streamsWindow -= uint32(payloadLength - 9)
-			if StreamID != Stream { // || raw[4] != 0x1 && raw[4] != 0x0
-				c.theBuffer.Write(raw[:payloadLength])
-				continue
-			}
-
-			RES.Header.theBuffer.Write(raw[9:payloadLength])
+			other.Header.theBuffer.Write(raw[9:payloadLength])
 			if raw[4] == 0x1 { // || raw[4] == 0x0
 				c.h2Streams++
-				c.run = false
+				other.Header.completed = true
 			}
 		case 0x1:
 			Stream := binary.BigEndian.Uint32(raw[5:9]) & 0x7FFFFFFF
-			if StreamID != Stream { // || raw[4] != 0x4 && raw[4] != 0x1 && raw[4] != 0x0
-				c.theBuffer.Write(raw[:payloadLength])
-				continue
-			}
-
-			RES.Header.theHeader.Write(raw[9:payloadLength])
-
+			other := c.h2Map[Stream]
+			other.Header.theHeader.Write(raw[9:payloadLength])
 			if raw[4] == 0x1 || raw[4] == 0x5 { // || raw[4] == 0x0
 				c.h2Streams++
-				c.run = false
+				other.Header.completed = true
 			}
 		case 0x3:
 			Stream := binary.BigEndian.Uint32(raw[5:9]) & 0x7FFFFFFF
-			if Stream != StreamID {
-				c.h2Streams++
-				c.theBuffer.Write(raw[:payloadLength])
-				continue
-			}
-
 			c.h2Streams++
-			c.run = false
-			return &RegnError{"the stream id `" + strconv.Itoa(int(StreamID)) + "` has been canceled by the server"}
-
+			other := c.h2Map[Stream]
+			other.Header.theBuffer.Write(raw[:payloadLength])
+			// other.Header.theBuffer.WriteString("closed stream id by server side")
+			other.Header.completed = true
 		case 0x4:
 			raw = raw[9:]
 			for len(raw) >= 6 {
@@ -676,9 +585,9 @@ func (c *Client) Http2ReadRespone(RES *ResponseType, StreamID uint32) error {
 				}
 				raw = raw[6:]
 			}
-
 		case 0x7:
 			c.Close()
+			c.lock.Unlock()
 			return &RegnError{Message: "the connection has been closed by the server 'http2.GoAwayFrame'"}
 		case 0x8:
 			Stream := binary.BigEndian.Uint32(raw[5:9]) & 0x7FFFFFFF
@@ -686,44 +595,28 @@ func (c *Client) Http2ReadRespone(RES *ResponseType, StreamID uint32) error {
 				winsize := binary.BigEndian.Uint32(raw[9:13])
 				c.h2WinServer += winsize
 			}
-			// else {
-			// 	c.flusher.Write(raw)
-			// 	c.flusher.Flush()
-			// }
 		}
 	}
 
+	c.lock.Unlock()
+	// RES.Header.StreamId = 0
 	return nil
 }
 
+// Not support goroutine-safe
 func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 	if c.upgraded {
-		if c.h2PrvStreams == 0 {
-			c.h2PrvStreams++
-		} else {
-			c.h2PrvStreams += 2
-		}
-
-		if err := c.Http2SendRequest(REQ, c.h2PrvStreams); err != nil {
+		if err := c.Http2WriteRequest(REQ, RES); err != nil {
+			return err
+		} else if err = c.Http2ReadRespone(RES); err != nil {
 			return err
 		}
-		if err := c.Http2ReadRespone(RES, c.h2PrvStreams); err != nil {
-			return err
-		}
-
 		return nil
 	}
 
 	if err := c.Connect(REQ); err != nil {
 		return err
 	}
-
-	// if c.TimeoutRead.Seconds() != 0 {
-	// 	c.NetConnection.SetReadDeadline(time.Now().Add(c.TimeoutRead))
-	// 	c.TimeoutRead = time.Duration(0 * time.Second)
-	// }
-
-	c.run = true
 
 	if RES.Header.upgraded {
 		RES.HttpDowngrade()
@@ -733,6 +626,7 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 		REQ.HttpDowngrade()
 	}
 
+	c.run = true
 	if _, err := c.flusher.Write(REQ.Header.raw.B); err != nil {
 		c.Close()
 		return err

@@ -3,10 +3,11 @@ package regn
 import (
 	"crypto/tls"
 	"fmt"
+	"strings"
+	"sync"
 
 	// "fmt"
 	"strconv"
-	"strings"
 	"testing"
 
 	regn "github.com/xsxo/regnhttp"
@@ -15,52 +16,54 @@ import (
 var RequestsNumber int = 19589
 var Errors int
 var Corrects int
+var Groups sync.WaitGroup
 
 func BenchmarkRegnhttp(b *testing.B) {
 	b.StopTimer()
-	request := regn.Http2Request()
-	defer request.Close()
-	response := regn.Http2Response()
-	defer response.Close()
 
 	c := regn.Client{TLSConfig: &tls.Config{InsecureSkipVerify: true}}
 	defer c.Close()
 
-	request.SetURL("https://localhost:9911")
-	request.SetMethod(regn.MethodPost)
-
 	c.Http2Upgrade()
-	if err := c.Connect(request); err != nil {
+
+	r := regn.Http2Request()
+	r.SetMethod(regn.MethodPost)
+	r.SetURL("https://localhost:9911")
+	if err := c.Connect(r); err != nil {
 		panic(err)
 	}
+	r.Close()
 
 	b.StartTimer()
 
-	for xo := 1; xo != RequestsNumber; xo += 2 {
-		// fmt.Println(xo)
-		request.SetBodyString("id=" + strconv.Itoa(xo))
-		if err := c.Http2SendRequest(request, uint32(xo)); err != nil {
-			panic(err.Error())
-		}
-	}
+	request := regn.Http2Request()
+	request.SetMethod(regn.MethodPost)
+	request.SetURL("https://localhost:9911")
 
-	for xo := 1; xo != RequestsNumber; xo += 2 {
-		if xo == 1025 || xo == 4835 || xo == 8351 {
+	responses := []*regn.ResponseType{}
+	for xo := 0; xo != RequestsNumber; xo++ {
+		s := regn.Http2Response()
+		body := "id=" + strconv.Itoa(xo)
+		request.SetBodyString(body)
+		if err := c.Http2WriteRequest(request, s); err != nil {
+			Errors++
 			continue
 		}
+		responses = append(responses, s)
+	}
 
-		if err := c.Http2ReadRespone(response, uint32(xo)); err != nil {
+	for xo, s := range responses {
+		if err := c.Http2ReadRespone(s); err != nil {
 			Errors++
-		} else if strings.Contains(response.BodyString(), "id="+strconv.Itoa(xo)) {
+			continue
+		} else if strings.Contains(s.BodyString(), "id="+strconv.Itoa(xo)) {
 			Corrects++
 		} else {
 			Errors++
 		}
-		// fmt.Println(response.BodyString())
 	}
 
 	fmt.Println("Corrects:", Corrects, "; Errors:", Errors)
-	request.Close()
-	response.Close()
+	r.Close()
 	c.Close()
 }

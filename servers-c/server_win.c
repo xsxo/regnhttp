@@ -6,7 +6,7 @@
 
 #pragma comment(lib, "ws2_32.lib") 
 
-#define PORT 9911
+#define PORT 80
 #define BUFFER_SIZE 4096
 
 DWORD WINAPI handle_client(LPVOID client_socket_ptr) {
@@ -69,7 +69,7 @@ int main() {
     }
 
     listen(server_socket, 10);
-    printf("Server: http://localhost: %d\n", PORT);
+    printf("Server: http://localhost:%d\n", PORT);
 
     while (1) {
         client_socket = accept(server_socket, (struct sockaddr*)&client_addr, &client_addr_len);
