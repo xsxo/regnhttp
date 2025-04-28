@@ -670,6 +670,7 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 					if contentLength <= bodySize {
 						break
 					}
+					continue
 				}
 			} else if bytes.Contains(RES.Header.theBuffer.B, lines) {
 				RES.Header.theBuffer.B = RES.Header.theBuffer.B[:len(RES.Header.theBuffer.B)-7]
