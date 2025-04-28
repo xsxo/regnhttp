@@ -13,7 +13,7 @@ import (
 	regn "github.com/xsxo/regnhttp"
 )
 
-var RequestsNumber int = 19589
+var RequestsNumber int = 9000
 var Errors int
 var Corrects int
 var Groups sync.WaitGroup
