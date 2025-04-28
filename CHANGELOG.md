@@ -2,8 +2,8 @@
 - First Version
 
 # v1.1.0 (24/12/31)
-- Fix Set Connection in bufio.Writer & bufio.Reader
-- Fix Recuce use buffer when connection with proxy
+- Fix set Connection in bufio.Writer & bufio.Reader
+- Fix recuce use buffer when connection with proxy
 
 # v1.2.0 (24/12/31)
 - Fix reading http2 responses
@@ -17,9 +17,9 @@
 
 # v1.4.0 (25/1/3)
 - Fix c.theBuffer when save other streams
-- Fix Pending var
-- Fix Window Update Frame from client side
-- Fix Benchmark regnhttp stopped without reason
+- Fix pending var
+- Fix window Update Frame from client side
+- Fix benchmark regnhttp stopped without reason
 
 # v1.5.0 (25/1/8)
 - Fix Http2 Headers Clear after read
@@ -35,7 +35,7 @@
 # v1.7.0 (25/1/11)
 - Fix Http2 Tags
 - Fix Http2 REQ.HttpDowngrade function
-- Improve performance Buffer writer in flush
+- Improve performance buffer writer in flush
 
 # v1.8.0 (25/1/12)
 - Fix Http2 stream flow control window
@@ -67,12 +67,12 @@
 - Imporve `Http2ReadResponse` function
 - Change stream id argument to auto stream id
 - Change Name function `Http2SendRequest` to `Http2WriteRequest`
-- New Tests Files && New Examples Files
+- New Tests files && New examples files
 
 # v1.14.0 (25/4/28)
-- Fix Buffer Full at bufio.Reader
+- Fix buffer full at bufio.Reader
 - Change name Json() function to BodyJson()
-- Added benchmark http1.1
+- Added http1.1 benchmarks
 - New `README.md` File
 
 - v1.15.0 (25/4/29)
