@@ -657,7 +657,7 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 					bodySize = len(RES.Header.theBuffer.B[index+4:])
 				}
 
-				idx := bytes.Index(raw, contentLengthKey)
+				idx := bytes.Index(RES.Header.theBuffer.B, contentLengthKey)
 				if idx > 0 {
 					i := idx + len(contentLengthKey)
 					for ; i < len(RES.Header.theBuffer.B); i++ {
@@ -667,17 +667,14 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 						}
 						contentLength = contentLength*10 + int(c-'0')
 					}
-
 					if contentLength <= bodySize {
 						break
 					}
 				}
-
 			} else if bytes.Contains(RES.Header.theBuffer.B, lines) {
 				RES.Header.theBuffer.B = RES.Header.theBuffer.B[:len(RES.Header.theBuffer.B)-7]
 				break
 			}
-
 		} else {
 			mathed = []int{contentLength - bodySize, c.ReadBufferSize}[intToBool(contentLength-bodySize > c.ReadBufferSize)]
 			raw, err := c.peeker.Peek(mathed)
