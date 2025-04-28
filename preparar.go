@@ -309,7 +309,7 @@ func (REQ *RequestType) SetBodyString(RawBody string) {
 	REQ.SetBody([]byte(RawBody))
 }
 
-func (REQ *RequestType) SetJson(RawJson map[string]string) error {
+func (REQ *RequestType) SetBodyJson(RawJson map[string]string) error {
 	TheBody, err := json.Marshal(RawJson)
 
 	if err != nil {

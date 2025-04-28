@@ -74,3 +74,7 @@
 - Change name Json() function to BodyJson()
 - Added benchmark http1.1
 - New `README.md` File
+
+- v1.15.0 (25/4/29)
+- Fix Content-Length Response Head
+- Change name SetJson() function to SetBodyJson() in Request object

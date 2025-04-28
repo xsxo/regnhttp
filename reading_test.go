@@ -32,8 +32,8 @@ func TestReadingResponse(T *testing.T) {
 
 	JsonREQ := map[string]string{"name": "NdOShy"}
 
-	if NewErr := req.SetJson(JsonREQ); NewErr != nil {
-		T.Error("Error: parsing map to json -> REQ.SetJson function")
+	if NewErr := req.SetBodyJson(JsonREQ); NewErr != nil {
+		T.Error("Error: parsing map to json -> REQ.SetBodyJson function")
 	}
 
 	clt := Client{
@@ -70,7 +70,7 @@ func TestReadingResponse(T *testing.T) {
 	JsonJson := JsonRES["json"].(map[string]interface{})
 
 	if JsonJson["name"] != JsonREQ["name"] {
-		T.Error("Error: json parsing -> RES.Json + REQ.SetJson functions")
+		T.Error("Error: json parsing -> RES.Json + REQ.SetBodyJson functions")
 	}
 
 	if res.Header.Get("Connection") != "keep-alive" {
