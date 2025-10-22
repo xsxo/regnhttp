@@ -187,3 +187,11 @@ func (HEAD *headStruct) Get(name string) string {
 	}
 	return ""
 }
+
+func (RES *ResponseType) Raw() []byte {
+	return RES.Header.theBuffer.B
+}
+
+func (RES *ResponseType) RawString() string {
+	return RES.Header.theBuffer.String()
+}

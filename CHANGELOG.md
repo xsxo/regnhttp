@@ -78,3 +78,7 @@
 - v1.15.0 (25/4/29)
 - Fix Content-Length Response Head
 - Change name SetJson() function to SetBodyJson() in Request object
+
+- v1.16.0 (25/10/22)
+- Imporve reading response algorithm
+- Added `Response.Raw` and `Response.RawString` function's 

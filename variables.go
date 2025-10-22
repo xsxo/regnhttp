@@ -21,7 +21,7 @@ var (
 	statusRegex *regexp.Regexp = regexp.MustCompile(`HTTP/1.1 (\d{3})`)
 	reasonRegex *regexp.Regexp = regexp.MustCompile(`HTTP/1.1 (\d{3} .*)`)
 
-	contentLengthKey []byte = []byte("Content-Length: ")
+	contentLengthKey []byte = []byte{67, 111, 110, 116, 101, 110, 116, 45, 76, 101, 110, 103, 116, 104, 58, 32}
 
 	lines     []byte = []byte{13, 10, 48, 13, 10, 13, 10}
 	SpaceByte []byte = []byte(" ")
@@ -92,4 +92,12 @@ func intToBool(b bool) int {
 		return 1
 	}
 	return 0
+}
+
+func BToInt(b []byte) int {
+	n := 0
+	for i := 0; i < len(b); i++ {
+		n = n*10 + int(b[i]-'0')
+	}
+	return n
 }

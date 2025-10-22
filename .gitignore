@@ -1,3 +1,4 @@
 vendor/
 spical_test/
 benchmark-regnhttp/
+*.exe

@@ -637,11 +637,46 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 	}
 
 	RES.Header.theBuffer.Reset()
-	var bodySize int
-	var contentLength int
-	var mathed int
-	for {
-		if contentLength == 0 {
+	var bodySize int = 1
+	var bodyZero bool
+	for bodySize != 0 {
+		if bodySize == 1 {
+			if _, err := c.peeker.Peek(1); err != nil {
+				c.Close()
+				return err
+			}
+			le := c.peeker.Buffered()
+			raw, _ := c.peeker.Peek(le)
+			RES.Header.theBuffer.Write(raw)
+
+			c.peeker.Discard(le)
+			search := bytes.Index(raw, lines[3:]) + 4
+			indexStart := bytes.Index(raw, contentLengthKey) + 16
+			if indexStart != 15 {
+				indexEnd := bytes.Index(raw[indexStart:], lines[5:]) + indexStart
+				bodySize = BToInt(raw[indexStart:indexEnd])
+				if search != 3 {
+					bodySize -= len(raw[search:])
+				}
+			} else if search != 3 {
+				bodySize = -1
+				bodyZero = true
+
+				if bytes.Contains(raw, lines) {
+					bodySize = 0
+				}
+			}
+		} else if bodySize > 1 {
+			mathed := []int{bodySize, c.ReadBufferSize}[intToBool(bodySize > c.ReadBufferSize)]
+			raw, err := c.peeker.Peek(mathed)
+			if err != nil {
+				c.Close()
+				return err
+			}
+			c.peeker.Discard(mathed)
+			RES.Header.theBuffer.Write(raw)
+			bodySize -= mathed
+		} else if bodyZero {
 			if _, err := c.peeker.Peek(1); err != nil {
 				c.Close()
 				return err
@@ -649,47 +684,12 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 			le := c.peeker.Buffered()
 			raw, _ := c.peeker.Peek(le)
 			c.peeker.Discard(le)
-			RES.Header.theBuffer.Write(raw)
 
-			if bodySize == 0 {
-				index := bytes.Index(RES.Header.theBuffer.B, lines[3:])
-				if index > 0 {
-					bodySize = len(RES.Header.theBuffer.B[index+4:])
-				}
-
-				idx := bytes.Index(RES.Header.theBuffer.B, contentLengthKey)
-				if idx > 0 {
-					i := idx + len(contentLengthKey)
-					for ; i < len(RES.Header.theBuffer.B); i++ {
-						c := RES.Header.theBuffer.B[i]
-						if c < '0' || c > '9' {
-							break
-						}
-						contentLength = contentLength*10 + int(c-'0')
-					}
-					if contentLength <= bodySize {
-						break
-					}
-					continue
-				}
-			} else if bytes.Contains(RES.Header.theBuffer.B, lines) {
-				RES.Header.theBuffer.B = RES.Header.theBuffer.B[:len(RES.Header.theBuffer.B)-7]
-				break
-			}
-		} else {
-			mathed = []int{contentLength - bodySize, c.ReadBufferSize}[intToBool(contentLength-bodySize > c.ReadBufferSize)]
-			raw, err := c.peeker.Peek(mathed)
-			if err != nil {
-				c.Close()
-				return err
-			}
-
-			RES.Header.theBuffer.Write(raw)
-			c.peeker.Discard(mathed)
-			bodySize += mathed
-
-			if contentLength <= bodySize {
-				break
+			if bytes.Contains(raw, lines) {
+				RES.Header.theBuffer.Write(raw[:len(raw)-7])
+				bodySize = 0
+			} else {
+				RES.Header.theBuffer.Write(raw)
 			}
 		}
 	}
