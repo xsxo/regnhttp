@@ -55,7 +55,7 @@ func Test_HTTP_2(t *testing.T) {
 	}
 
 	r.SetMethod("GET")
-	r.SetURL("https://nasa.com/")
+	r.SetURL("https://github.com/")
 
 	if err := c.Do(r, s); err != nil {
 		panic("Do function 3; err" + err.Error())
