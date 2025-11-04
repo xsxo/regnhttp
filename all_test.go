@@ -48,7 +48,7 @@ func Test_HTTP1_1(t *testing.T) {
 	c.Close()
 
 	r.SetMethod("GET")
-	r.SetURL("https://github.omc.com/")
+	r.SetURL("https://github.com/")
 
 	if err := c.Do(r, s); err != nil {
 		t.Error("Do function 3")
