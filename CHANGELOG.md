@@ -75,10 +75,14 @@
 - Added http1.1 benchmarks
 - New `README.md` File
 
-- v1.15.0 (25/4/29)
+# v1.15.0 (25/4/29)
 - Fix Content-Length Response Head
 - Change name SetJson() function to SetBodyJson() in Request object
 
-- v1.16.0 (25/10/22)
+# v1.16.0 (25/10/22)
 - Imporve reading response algorithm
 - Added `Response.Raw` and `Response.RawString` function's 
+
+# v1.17.0 (25/11/4)
+- Fix reading response algorithm
+- Added `Request.Raw` and `Request.RawString` function's

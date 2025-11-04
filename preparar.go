@@ -333,3 +333,11 @@ func (REQ *ConnectionInformation) Remove(key string) {
 func remove(slice []hpack.HeaderField, index int) []hpack.HeaderField {
 	return append(slice[:index], slice[index+1:]...)
 }
+
+func (REQ *RequestType) Raw() []byte {
+	return REQ.Header.raw.B
+}
+
+func (REQ *RequestType) RawString() string {
+	return REQ.Header.raw.String()
+}

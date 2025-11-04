@@ -654,6 +654,10 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 			indexStart := bytes.Index(raw, contentLengthKey) + 16
 			if indexStart != 15 {
 				indexEnd := bytes.Index(raw[indexStart:], lines[5:]) + indexStart
+				if indexEnd <= indexStart {
+					indexEnd = len(raw) - 1
+				}
+
 				bodySize = BToInt(raw[indexStart:indexEnd])
 				if search != 3 {
 					bodySize -= len(raw[search:])
