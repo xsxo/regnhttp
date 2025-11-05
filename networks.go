@@ -657,7 +657,6 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 				if indexEnd <= indexStart {
 					indexEnd = len(raw) - 1
 				}
-
 				bodySize = BToInt(raw[indexStart:indexEnd])
 				if search != 3 {
 					bodySize -= len(raw[search:])
