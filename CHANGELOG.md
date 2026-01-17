@@ -86,3 +86,13 @@
 # v1.17.0 (25/11/4)
 - Fix reading response algorithm
 - Added `Request.Raw` and `Request.RawString` function's
+
+# v2.0.0 (26/1/17)
+- Remove all http2 functions
+- Remove `response.BodyJson` function
+- Remove `request.SetBodyJson` function
+- Replace regexps function to `bytes.Index` to Imporve performance
+- Added `response.Reset` & `request.Reset` functions
+- Added `response.StatusCode` & `response.StatusCodeString` & `response.StatusCodeInt` 
+- Added `response.Reason` & `response.ReasonString`
+- Added `client.SetNoDelay` & `NagleOff` to off nagle algorithm

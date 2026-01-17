@@ -3,6 +3,7 @@ package main
 // import library
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -23,11 +24,11 @@ func Example() {
 	// ex: clt.Proxy("http://username:password@localhost:9911")
 
 	// create request object
-	req := regn.Http2Request()
+	req := regn.Request()
 	defer req.Close()
 
 	// create response object
-	res := regn.Http2Response()
+	res := regn.Response()
 	defer res.Close()
 
 	// set meothod
@@ -65,15 +66,10 @@ func Example() {
 	// read string body response
 	fmt.Println(res.BodyString())
 
-	// read json response
-	Json, err := res.BodyJson()
+	// read string body response
+	responseBody := res.BodyString()
 
-	if err != nil {
-		panic("Err: " + err.Error())
-	}
-
-	args := Json["args"].(map[string]interface{})
-	if args["name"] == "ndoshy" {
+	if strings.Contains(responseBody, `"name":"ndoshy"`) {
 		fmt.Println(true)
 	} else {
 		fmt.Println(false)

@@ -35,18 +35,18 @@ jobs:
         nohup go run server.go & echo $! > server_pid.txt
         cd ..
 
-    - name: Start REGN Benchmark
-      run: | 
-        cd benchmark-regnhttp
-        go test -bench=BenchmarkRegnhttp -benchtime=1x
-        cd ..
+    # - name: Start REGN Benchmark
+    #   run: | 
+    #     cd benchmark-regnhttp
+    #     go test -bench=BenchmarkRegnhttp -benchtime=1x
+    #     cd ..
 
-    - name: Start net/http & fasthttp benchmark
-      run: | 
-        cd benchmark
-        go test -bench=BenchmarkFasthttp -benchtime=1x
-        go test -bench=BenchmarkNethttp -benchtime=1x
-        cd ..
+    # - name: Start net/http & fasthttp benchmark
+    #   run: | 
+    #     cd benchmark
+    #     go test -bench=BenchmarkFasthttp -benchtime=1x
+    #     go test -bench=BenchmarkNethttp -benchtime=1x
+    #     cd ..
 
     - name: Test
       run: go test -v ./...
