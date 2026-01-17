@@ -8,9 +8,15 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: debian-latest
     steps:
     - uses: actions/checkout@v4
+
+    - name: Install latest GCC
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential
+        gcc --version
 
     - name: Set up Go
       uses: actions/setup-go@v4
@@ -29,10 +35,11 @@ jobs:
     - name: Build
       run: go build -v ./...
 
-    - name: Start H2 Server
+    - name: Start C Server
       run: |
-        cd servers-h2
-        nohup go run server.go & echo $! > server_pid.txt
+        cd servers-c
+        gcc -O2 serverli.c -o serverli
+        nohup ./serverli > server.log 2>&1 & echo $! > server_pid.txt
         cd ..
 
     # - name: Start REGN Benchmark
@@ -51,9 +58,10 @@ jobs:
     - name: Test
       run: go test -v ./...
 
-    - name: Kill Server
+    - name: Kill C Server
       run: |
-        if [ -f servers-h2/server_pid.txt ]; then
-          kill $(cat servers-h2/server_pid.txt) 
-          rm servers-h2/server_pid.txt
+        if [ -f servers-c/server_pid.txt ]; then
+          kill -9 $(cat servers-c/server_pid.txt)
+          rm servers-c/server_pid.txt
+          rm -f servers-c/serverli
         fi
