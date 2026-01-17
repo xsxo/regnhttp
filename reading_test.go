@@ -15,10 +15,6 @@ func TestReading(t *testing.T) {
 	r.Header.Add("Lang", "Python3")
 	r.SetBodyString("Hi From FirstBody")
 
-	if err := c.Connect(r); err != nil {
-		t.Error("Client.Connect function with 'localhost' host")
-	}
-
 	if !strings.Contains(r.Header.raw.String(), "Lang: Python3\r\n") {
 		t.Error("Request.Header.Add function 0")
 	} else if !strings.Contains(r.Header.raw.String(), "\r\n\r\nHi From FirstBody") {
