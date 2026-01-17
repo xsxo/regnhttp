@@ -16,7 +16,7 @@ func BenchmarkFasthttp(b *testing.B) {
 	request := fasthttp.AcquireRequest()
 	response := fasthttp.AcquireResponse()
 
-	request.SetRequestURI("https://localhost:9911")
+	request.SetRequestURI("https://localhost:8080")
 	request.Header.SetMethod(fasthttp.MethodPost)
 
 	c := &fasthttp.Client{TLSConfig: &tls.Config{InsecureSkipVerify: true}}

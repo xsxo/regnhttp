@@ -31,7 +31,7 @@ func (REQ *RequestType) Reset() {
 
 func Request() *RequestType {
 	toReturn := &RequestType{Header: &ConnectionInformation{raw: *bufferPool.Get()}}
-	toReturn.Header.raw.WriteString("S S HTTP/1.1\r\n")
+	toReturn.Header.raw.WriteString("GET /golang HTTP/1.1\r\n")
 	toReturn.Header.raw.WriteString("User-Agent: " + Name + "/" + Version + Author + "\r\n")
 	toReturn.Header.raw.WriteString("Connection: Keep-Alive\r\n")
 	toReturn.Header.raw.WriteString("\r\n")
@@ -90,7 +90,7 @@ func (REQ *RequestType) SetURL(Url string) {
 		query = nil
 	}
 
-	REQ.Header.raw.B = bytes.ReplaceAll(REQ.Header.raw.B, REQ.Header.raw.B[bytes.Index(REQ.Header.raw.B, SpaceByte)+1:bytes.Index(REQ.Header.raw.B, httpVersion)-1], api)
+	REQ.Header.raw.B = bytes.Replace(REQ.Header.raw.B, REQ.Header.raw.B[bytes.Index(REQ.Header.raw.B, SpaceByte)+1:bytes.Index(REQ.Header.raw.B, httpVersion)-1], api, 1)
 	REQ.Header.Set("Host", REQ.Header.myhost)
 }
 

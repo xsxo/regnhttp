@@ -21,7 +21,7 @@ func Example() {
 	// to set proxy connection
 	// clt.Proxy("http://username:password@host:port")
 	// clt.Proxy("http://host:port")
-	// ex: clt.Proxy("http://username:password@localhost:9911")
+	// ex: clt.Proxy("http://username:password@localhost:11")
 
 	// create request object
 	req := regn.Request()

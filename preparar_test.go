@@ -10,7 +10,7 @@ var req *RequestType
 func prepare_request() {
 	req = Request()
 	req.SetMethod(MethodPost)
-	req.SetURL("https://localhost:11/api")
+	req.SetURL("https://localhost:8080/api")
 	req.Header.Set("Message1", "REGN HTTP v0.0.0-rc @xsxo - GitHub.com")
 	req.Header.Set("Message2", "REGN HTTP v0.0.0-rc @xsxo - GitHub.com")
 	req.SetBody([]byte("REGN HTTP TEST BODY"))

@@ -11,7 +11,7 @@ func TestReading(t *testing.T) {
 	s := Response()
 
 	r.SetMethod("POST")
-	r.SetURL("http://localhost:11/python3")
+	r.SetURL("http://localhost:8080/python3")
 	r.Header.Add("Lang", "Python3")
 	r.SetBodyString("Hi From FirstBody")
 
@@ -33,7 +33,11 @@ func TestReading(t *testing.T) {
 		t.Error("Response.BodyString function 0")
 	} else if s.StatusCodeInt() != 200 {
 		t.Error("Response.StatusCodeInt function 0")
-	} else if s.StatusCodeString() != "200 OK" {
+	} else if s.StatusCodeString() != "200" {
+		t.Error("Response.StatusCodeString function 0")
+	} else if s.StatusCodeInt() != 200 {
+		t.Error("Response.StatusCodeString function 0")
+	} else if s.ReasonString() != "200 OK" {
 		t.Error("Response.StatusCodeString function 0")
 	}
 
@@ -64,8 +68,12 @@ func TestReading(t *testing.T) {
 		t.Error("Response.BodyString function 1")
 	} else if s.StatusCodeInt() != 200 {
 		t.Error("Response.StatusCodeInt function 1")
-	} else if s.StatusCodeString() != "200 OK" {
+	} else if s.StatusCodeString() != "200" {
 		t.Error("Response.StatusCodeString function 1")
+	} else if s.StatusCodeInt() != 200 {
+		t.Error("Response.StatusCodeString function 0")
+	} else if s.ReasonString() != "200 OK" {
+		t.Error("Response.StatusCodeString function 0")
 	}
 
 	c.Close()
