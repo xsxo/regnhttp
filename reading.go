@@ -3,12 +3,13 @@ package regn
 import (
 	"bytes"
 	"strings"
-
-	"github.com/valyala/bytebufferpool"
 )
 
 type headStruct struct {
-	theBuffer bytebufferpool.ByteBuffer
+	// theBuffer bytebufferpool.ByteBuffer
+	theBuffer  []byte
+	bufferSize int
+	position   int
 }
 
 type ResponseType struct {
@@ -16,30 +17,31 @@ type ResponseType struct {
 }
 
 func (RES *ResponseType) Close() {
-	RES.Header.theBuffer.Reset()
-	bufferPool.Put(&RES.Header.theBuffer)
+	RES.Header.theBuffer = nil
+	RES.Header.bufferSize = 0
 }
 
 func (RES *ResponseType) Reset() {
-	RES.Header.theBuffer.Reset()
+	RES.Header.theBuffer = RES.Header.theBuffer[:0]
+	RES.Header.theBuffer = RES.Header.theBuffer[:RES.Header.bufferSize]
 }
 
-func Response() *ResponseType {
-	return &ResponseType{Header: &headStruct{theBuffer: *bufferPool.Get()}}
+func Response(bufferSize int) *ResponseType {
+	return &ResponseType{Header: &headStruct{theBuffer: make([]byte, bufferSize, bufferSize+1), bufferSize: bufferSize}}
 }
 
 func (RES *ResponseType) StatusCode() []byte {
-	index1 := bytes.IndexByte(RES.Header.theBuffer.B, ' ')
+	index1 := bytes.IndexByte(RES.Header.theBuffer, ' ')
 	if index1 == -1 {
 		return nil
 	}
 
-	index2 := index1 + 1 + bytes.IndexByte(RES.Header.theBuffer.B[index1+1:], ' ')
+	index2 := index1 + 1 + bytes.IndexByte(RES.Header.theBuffer[index1+1:], ' ')
 	if index2 == -1 {
 		return nil
 	}
 
-	return RES.Header.theBuffer.B[index1+1 : index2]
+	return RES.Header.theBuffer[index1+1 : index2]
 }
 
 func (RES *ResponseType) StatusCodeString() string {
@@ -51,11 +53,11 @@ func (RES *ResponseType) StatusCodeInt() int {
 }
 
 func (RES *ResponseType) Reason() []byte {
-	index1 := bytes.IndexByte(RES.Header.theBuffer.B, ' ')
+	index1 := bytes.IndexByte(RES.Header.theBuffer, ' ')
 	if index1 == -1 {
 		return nil
 	}
-	return RES.Header.theBuffer.B[index1+1 : bytes.Index(RES.Header.theBuffer.B, lines[5:])]
+	return RES.Header.theBuffer[index1+1 : bytes.Index(RES.Header.theBuffer, lines[5:])]
 }
 
 func (RES *ResponseType) ReasonString() string {
@@ -67,17 +69,17 @@ func (RES *ResponseType) BodyString() string {
 }
 
 func (RES *ResponseType) Body() []byte {
-	idx := bytes.Index(RES.Header.theBuffer.B, lines[3:])
+	idx := bytes.Index(RES.Header.theBuffer, lines[3:])
 	if idx == -1 {
 		return nil
 	}
-	return RES.Header.theBuffer.B[idx+4:]
+	return RES.Header.theBuffer[idx+4 : RES.Header.position]
 }
 
 func (HEAD *headStruct) GetAll() map[string]string {
 	forReturn := make(map[string]string)
 
-	forNothing := strings.Split(HEAD.theBuffer.String(), "\r\n")[1:]
+	forNothing := strings.Split(string(HEAD.theBuffer), "\r\n")[1:]
 
 	for _, res := range forNothing {
 		index1 := strings.Index(res, ": ")
@@ -93,7 +95,7 @@ func (HEAD *headStruct) GetAll() map[string]string {
 }
 
 func (HEAD *headStruct) Get(name string) string {
-	forNothing := strings.Split(HEAD.theBuffer.String(), "\r\n")[1:]
+	forNothing := strings.Split(string(HEAD.theBuffer), "\r\n")[1:]
 
 	for _, res := range forNothing {
 		index1 := strings.Index(res, ": ")
@@ -108,9 +110,9 @@ func (HEAD *headStruct) Get(name string) string {
 }
 
 func (RES *ResponseType) Raw() []byte {
-	return RES.Header.theBuffer.B
+	return RES.Header.theBuffer[:RES.Header.position]
 }
 
 func (RES *ResponseType) RawString() string {
-	return RES.Header.theBuffer.String()
+	return string(RES.Header.theBuffer[:RES.Header.position])
 }

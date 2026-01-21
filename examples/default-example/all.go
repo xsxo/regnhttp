@@ -27,8 +27,8 @@ func Example() {
 	req := regn.Request()
 	defer req.Close()
 
-	// create response object
-	res := regn.Response()
+	// create response object with buffer size
+	res := regn.Response(4 * 1024)
 	defer res.Close()
 
 	// set meothod

@@ -279,7 +279,9 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 		return err
 	}
 
-	RES.Header.theBuffer.Reset()
+	RES.Header.position = 0
+	RES.Header.theBuffer = RES.Header.theBuffer[:0]
+	RES.Header.theBuffer = RES.Header.theBuffer[:RES.Header.bufferSize]
 
 	var indexB int
 	var bufferd int
@@ -297,21 +299,26 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 
 		raw, _ := c.peeker.Peek(bufferd)
 		c.peeker.Discard(bufferd)
-		RES.Header.theBuffer.Write(raw)
+
+		if RES.Header.position+bufferd < RES.Header.bufferSize {
+			copy(RES.Header.theBuffer[RES.Header.position:], raw)
+			RES.Header.position += bufferd
+		}
+
 		if indexB == 0 && contentLength == -1 {
 			indexB = bytes.Index(raw, lines[3:])
 			if indexB == -1 {
 				continue
 			}
-			indexL := bytes.Index(RES.Header.theBuffer.B, contentLengthKey) + 16
+			indexL := bytes.Index(RES.Header.theBuffer, contentLengthKey) + 16
 			if indexL == 15 {
 				if raw[len(raw)-1] == 125 {
 					break
 				}
 				continue
 			}
-			indexRN := bytes.Index(RES.Header.theBuffer.B[indexL:], lines[5:]) + indexL
-			contentLength = bToInt(RES.Header.theBuffer.B[indexL:indexRN])
+			indexRN := bytes.Index(RES.Header.theBuffer[indexL:], lines[5:]) + indexL
+			contentLength = bToInt(RES.Header.theBuffer[indexL:indexRN])
 			contentLength -= len(raw[indexB+4:])
 		} else if contentLength > 0 {
 			contentLength -= len(raw)

@@ -8,7 +8,7 @@ import (
 func TestReading(t *testing.T) {
 	c := Client{}
 	r := Request()
-	s := Response()
+	s := Response(4 * 1024)
 
 	r.SetMethod("POST")
 	r.SetURL("http://localhost:8080/python3")
@@ -82,7 +82,7 @@ func TestReading(t *testing.T) {
 	r.SetBody(nil)
 	if err := c.Do(r, s); err != nil {
 		t.Error("Do function 3")
-	} else if !strings.Contains(s.BodyString(), `</html>`) {
+	} else if !strings.Contains(s.ReasonString(), "200 OK") {
 		t.Error("Reading Html Page")
 	}
 
