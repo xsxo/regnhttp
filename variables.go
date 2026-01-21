@@ -25,12 +25,15 @@ var (
 )
 
 const (
-	MethodPost    string = "POST"
-	MethodGet     string = "GET"
-	MethodPut     string = "PUT"
-	MethodConnect string = "CONNECT"
-	MethodOptions string = "OPTIONS"
-	MethodTrace   string = "TRACE"
+	MethodGet     = "GET"
+	MethodHead    = "HEAD"
+	MethodPost    = "POST"
+	MethodPut     = "PUT"
+	MethodPatch   = "PATCH"
+	MethodDelete  = "DELETE"
+	MethodConnect = "CONNECT"
+	MethodOptions = "OPTIONS"
+	MethodTrace   = "TRACE"
 )
 
 func (e *RegnError) Error() string {

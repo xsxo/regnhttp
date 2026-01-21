@@ -280,63 +280,45 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 	}
 
 	RES.Header.theBuffer.Reset()
-	var bodySize int = 1
-	var bodyZero bool
-	for bodySize != 0 {
-		if bodySize == 1 {
+
+	var indexB int
+	var bufferd int
+	var contentLength int = -1
+	for contentLength != 0 {
+		if contentLength == -1 {
 			if _, err := c.peeker.Peek(1); err != nil {
 				c.Close()
 				return err
 			}
-			le := c.peeker.Buffered()
-			raw, _ := c.peeker.Peek(le)
-			RES.Header.theBuffer.Write(raw)
+			bufferd = c.peeker.Buffered()
+		} else {
+			bufferd = []int{contentLength, c.ReadBufferSize}[intToBool(contentLength > c.ReadBufferSize)]
+		}
 
-			c.peeker.Discard(le)
-			search := bytes.Index(raw, lines[3:]) + 4
-			indexStart := bytes.Index(raw, contentLengthKey) + 16
-			if indexStart != 15 {
-				indexEnd := bytes.Index(raw[indexStart:], lines[5:]) + indexStart
-				if indexEnd <= indexStart {
-					indexEnd = len(raw) - 1
+		raw, _ := c.peeker.Peek(bufferd)
+		c.peeker.Discard(bufferd)
+		RES.Header.theBuffer.Write(raw)
+		if indexB == 0 && contentLength == -1 {
+			indexB = bytes.Index(raw, lines[3:])
+			if indexB == -1 {
+				continue
+			}
+			indexL := bytes.Index(RES.Header.theBuffer.B, contentLengthKey) + 16
+			if indexL == 15 {
+				if raw[len(raw)-1] == 125 {
+					break
 				}
-				bodySize = bToInt(raw[indexStart:indexEnd])
-				if search != 3 {
-					bodySize -= len(raw[search:])
-				}
-			} else if search != 3 {
-				bodySize = -1
-				bodyZero = true
-
-				if bytes.Contains(raw, lines) {
-					bodySize = 0
-				}
+				continue
 			}
-		} else if bodySize > 1 {
-			mathed := []int{bodySize, c.ReadBufferSize}[intToBool(bodySize > c.ReadBufferSize)]
-			raw, err := c.peeker.Peek(mathed)
-			if err != nil {
-				c.Close()
-				return err
-			}
-			c.peeker.Discard(mathed)
-			RES.Header.theBuffer.Write(raw)
-			bodySize -= mathed
-		} else if bodyZero {
-			if _, err := c.peeker.Peek(1); err != nil {
-				c.Close()
-				return err
-			}
-			le := c.peeker.Buffered()
-			raw, _ := c.peeker.Peek(le)
-			c.peeker.Discard(le)
-
-			if bytes.Contains(raw, lines) {
-				RES.Header.theBuffer.Write(raw[:len(raw)-7])
-				bodySize = 0
-			} else {
-				RES.Header.theBuffer.Write(raw)
-			}
+			indexRN := bytes.Index(RES.Header.theBuffer.B[indexL:], lines[5:]) + indexL
+			contentLength = bToInt(RES.Header.theBuffer.B[indexL:indexRN])
+			contentLength -= len(raw[indexB+4:])
+		} else if contentLength > 0 {
+			contentLength -= len(raw)
+		} else if raw[len(raw)-1] == 125 {
+			break
+		} else if bytes.Contains(raw, lines) {
+			break
 		}
 	}
 

@@ -11,7 +11,7 @@
 
 #define PORT 8080
 #define MAX_EVENTS 1024
-#define BUFFER_SIZE 8192
+#define BUFFER_SIZE 4096
 
 typedef struct {
     int fd;
