@@ -26,7 +26,7 @@ func (RES *ResponseType) Reset() {
 }
 
 func Response(bufferSize int) *ResponseType {
-	return &ResponseType{Header: &headStruct{theBuffer: make([]byte, bufferSize, bufferSize+1), bufferSize: bufferSize}}
+	return &ResponseType{Header: &headStruct{theBuffer: make([]byte, 0, bufferSize), bufferSize: bufferSize}}
 }
 
 func (RES *ResponseType) StatusCode() []byte {

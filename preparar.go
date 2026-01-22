@@ -35,7 +35,8 @@ func Request(bufferSize int) *RequestType {
 		panic("can not using bufferSize < 128 in `regn.Request` function")
 	}
 
-	toReturn := &RequestType{Header: &ConnectionInformation{raw: make([]byte, bufferSize, bufferSize+1), bufferSize: bufferSize}}
+	toReturn := &RequestType{Header: &ConnectionInformation{raw: make([]byte, 0, bufferSize), bufferSize: bufferSize}}
+	toReturn.Header.raw = toReturn.Header.raw[:bufferSize]
 	copy(toReturn.Header.raw[toReturn.Header.position:], []byte("GET /golang HTTP/1.1\r\n"+"User-Agent: "+Name+"/"+Version+Author+"\r\n"+"Connection: Keep-Alive\r\n"+"\r\n"))
 	toReturn.Header.position += 89
 	return toReturn
