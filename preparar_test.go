@@ -37,11 +37,11 @@ func Test_SetHeaders(t *testing.T) {
 	}
 
 	clear_request()
-	if bytes.Contains(req.Header.raw, []byte("Message1: ")) {
+	if bytes.Contains(req.Raw(), []byte("Message1: ")) {
 		t.Error("error when prepare RequestType.Header.Del function")
-	} else if bytes.Contains(req.Header.raw, []byte("Message2: ")) {
+	} else if bytes.Contains(req.Raw(), []byte("Message2: ")) {
 		t.Error("error when prepare RequestType.Header.Remove function")
-	} else if bytes.Contains(req.Header.raw, []byte("\r\n\r\nREGN HTTP TEST BODY")) {
+	} else if bytes.Contains(req.Raw(), []byte("\r\n\r\nREGN HTTP TEST BODY")) {
 		t.Error("error when prepare RequestType.SetBody function")
 	}
 }
