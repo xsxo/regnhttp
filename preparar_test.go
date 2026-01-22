@@ -8,7 +8,7 @@ import (
 var req *RequestType
 
 func prepare_request() {
-	req = Request()
+	req = Request(4 * 1024)
 	req.SetMethod(MethodPost)
 	req.SetURL("https://localhost:8080/api")
 	req.Header.Set("Message1", "REGN HTTP v0.0.0-rc @xsxo - GitHub.com")
@@ -24,24 +24,24 @@ func clear_request() {
 
 func Test_SetHeaders(t *testing.T) {
 	prepare_request()
-	if !bytes.Contains(req.Header.raw.B, []byte(" /api ")) {
+	if !bytes.Contains(req.Header.raw, []byte(" /api ")) {
 		t.Error("error when prepare RequestType.SetURL function")
-	} else if !bytes.Contains(req.Header.raw.B, []byte("Message1: ")) {
+	} else if !bytes.Contains(req.Header.raw, []byte("Message1: ")) {
 		t.Error("error when prepare RequestType.Header.Set function")
-	} else if !bytes.Contains(req.Header.raw.B, []byte("Message2: ")) {
+	} else if !bytes.Contains(req.Header.raw, []byte("Message2: ")) {
 		t.Error("error when prepare RequestType.Header.Add function")
-	} else if !bytes.Contains(req.Header.raw.B, []byte("\r\n\r\nREGN HTTP TEST BODY")) {
+	} else if !bytes.Contains(req.Header.raw, []byte("\r\n\r\nREGN HTTP TEST BODY")) {
 		t.Error("error when prepare RequestType.SetBody function")
-	} else if !bytes.Contains(req.Header.raw.B, []byte("Content-Length: ")) {
+	} else if !bytes.Contains(req.Header.raw, []byte("Content-Length: ")) {
 		t.Error("error when prepare RequestType.SetBody function")
 	}
 
 	clear_request()
-	if bytes.Contains(req.Header.raw.B, []byte("Message1: ")) {
+	if bytes.Contains(req.Header.raw, []byte("Message1: ")) {
 		t.Error("error when prepare RequestType.Header.Del function")
-	} else if bytes.Contains(req.Header.raw.B, []byte("Message2: ")) {
+	} else if bytes.Contains(req.Header.raw, []byte("Message2: ")) {
 		t.Error("error when prepare RequestType.Header.Remove function")
-	} else if bytes.Contains(req.Header.raw.B, []byte("\r\n\r\nREGN HTTP TEST BODY")) {
+	} else if bytes.Contains(req.Header.raw, []byte("\r\n\r\nREGN HTTP TEST BODY")) {
 		t.Error("error when prepare RequestType.SetBody function")
 	}
 }

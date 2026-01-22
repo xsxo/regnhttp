@@ -7,7 +7,7 @@ import (
 
 func TestReading(t *testing.T) {
 	c := Client{}
-	r := Request()
+	r := Request(4 * 1024)
 	s := Response(4 * 1024)
 
 	r.SetMethod("POST")
@@ -15,13 +15,13 @@ func TestReading(t *testing.T) {
 	r.Header.Add("Lang", "Python3")
 	r.SetBodyString("Hi From FirstBody")
 
-	if !strings.Contains(r.Header.raw.String(), "Lang: Python3\r\n") {
+	if !strings.Contains(string(r.Header.raw), "Lang: Python3\r\n") {
 		t.Error("Request.Header.Add function 0")
-	} else if !strings.Contains(r.Header.raw.String(), "\r\n\r\nHi From FirstBody") {
+	} else if !strings.Contains(string(r.Header.raw), "\r\n\r\nHi From FirstBody") {
 		t.Error("Request.SetBodyString function 0")
-	} else if !strings.Contains(r.Header.raw.String(), "POST") {
+	} else if !strings.Contains(string(r.Header.raw), "POST") {
 		t.Error("Request.SetMethod function 0")
-	} else if !strings.Contains(r.Header.raw.String(), "/python3") {
+	} else if !strings.Contains(string(r.Header.raw), "/python3") {
 		t.Error("Request.SetURL function 0")
 	}
 
@@ -50,13 +50,13 @@ func TestReading(t *testing.T) {
 		t.Error("Response.Header.GET function 1")
 	}
 
-	if !strings.Contains(r.Header.raw.String(), "Lang: Golang\r\n") || strings.Contains(r.Header.raw.String(), "Lang: Python3\r\n") {
+	if !strings.Contains(string(r.Header.raw), "Lang: Golang\r\n") || strings.Contains(string(r.Header.raw), "Lang: Python3\r\n") {
 		t.Error("Request.Header.Add function 1")
-	} else if !strings.Contains(r.Header.raw.String(), "\r\n\r\nHi From LastBody") || strings.Contains(r.Header.raw.String(), "\r\n\r\nHi From FirstBody") {
+	} else if !strings.Contains(string(r.Header.raw), "\r\n\r\nHi From LastBody") || strings.Contains(string(r.Header.raw), "\r\n\r\nHi From FirstBody") {
 		t.Error("Request.SetBodyString function 1")
-	} else if !strings.Contains(r.Header.raw.String(), "PUT") || strings.Contains(r.Header.raw.String(), "POST") {
+	} else if !strings.Contains(string(r.Header.raw), "PUT") || strings.Contains(string(r.Header.raw), "POST") {
 		t.Error("Request.SetMethod function 1")
-	} else if !strings.Contains(r.Header.raw.String(), "/golang") || strings.Contains(r.Header.raw.String(), "/python3") {
+	} else if !strings.Contains(string(r.Header.raw), "/golang") || strings.Contains(string(r.Header.raw), "/python3") {
 		t.Error("Request.SetURL function 1")
 	}
 

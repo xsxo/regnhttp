@@ -4,8 +4,6 @@ import (
 	"bufio"
 	"io"
 	"sync"
-
-	"github.com/valyala/bytebufferpool"
 )
 
 type RegnError struct {
@@ -13,7 +11,6 @@ type RegnError struct {
 }
 
 var (
-	bufferPool  bytebufferpool.Pool
 	peekerPool  *sync.Pool = &sync.Pool{}
 	flusherPool *sync.Pool = &sync.Pool{}
 

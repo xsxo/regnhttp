@@ -6,30 +6,6 @@ import (
 	"testing"
 )
 
-func TestBytesPool(T *testing.T) {
-	buffer := bytes.Buffer{}
-	buffer.WriteString(Name + " - " + Version)
-
-	pool := bufferPool.Get()
-
-	pool.ReadFrom(&buffer)
-
-	if pool.Len() == 0 {
-		T.Error("Error use bytes pool buffer")
-	}
-
-	pool.Reset()
-	buffer.Reset()
-
-	pool.WriteString(Description)
-
-	if pool.Len() == 0 {
-		T.Error("Error use bytes pool buffer")
-	}
-
-	pool.Reset()
-}
-
 func TestWriterPool(T *testing.T) {
 	buffer := bytes.Buffer{}
 

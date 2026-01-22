@@ -6,7 +6,6 @@ import (
 )
 
 type headStruct struct {
-	// theBuffer bytebufferpool.ByteBuffer
 	theBuffer  []byte
 	bufferSize int
 	position   int

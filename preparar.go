@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"net/url"
 	"strings"
-
-	"github.com/valyala/bytebufferpool"
 )
 
 type ConnectionInformation struct {
@@ -13,7 +11,9 @@ type ConnectionInformation struct {
 	myhost string
 	mytls  bool
 
-	raw bytebufferpool.ByteBuffer
+	raw        []byte
+	bufferSize int
+	position   int
 }
 
 type RequestType struct {
@@ -21,30 +21,31 @@ type RequestType struct {
 }
 
 func (REQ *RequestType) Close() {
-	REQ.Header.raw.Reset()
-	bufferPool.Put(&REQ.Header.raw)
+	REQ.Header.raw = nil
+	REQ.Header.bufferSize = 0
 }
 
 func (REQ *RequestType) Reset() {
-	REQ.Header.raw.Reset()
+	REQ.Header.raw = REQ.Header.raw[:0]
+	REQ.Header.raw = REQ.Header.raw[:REQ.Header.bufferSize]
 }
 
-func Request() *RequestType {
-	toReturn := &RequestType{Header: &ConnectionInformation{raw: *bufferPool.Get()}}
-	toReturn.Header.raw.WriteString("GET /golang HTTP/1.1\r\n")
-	toReturn.Header.raw.WriteString("User-Agent: " + Name + "/" + Version + Author + "\r\n")
-	toReturn.Header.raw.WriteString("Connection: Keep-Alive\r\n")
-	toReturn.Header.raw.WriteString("\r\n")
+func Request(bufferSize int) *RequestType {
+	if bufferSize < 128 {
+		panic("can not using bufferSize < 128 in `regn.Request` function")
+	}
 
+	toReturn := &RequestType{Header: &ConnectionInformation{raw: make([]byte, bufferSize, bufferSize+1), bufferSize: bufferSize}}
+	copy(toReturn.Header.raw[toReturn.Header.position:], []byte("GET /golang HTTP/1.1\r\n"+"User-Agent: "+Name+"/"+Version+Author+"\r\n"+"Connection: Keep-Alive\r\n"+"\r\n"))
+	toReturn.Header.position += 89
 	return toReturn
 }
 
-func (REQ *RequestType) ReturnBytes() []byte {
-	return REQ.Header.raw.B
-}
-
 func (REQ *RequestType) SetMethod(METHOD string) {
-	REQ.Header.raw.B = append([]byte(strings.ToUpper(METHOD)), REQ.Header.raw.B[bytes.Index(REQ.Header.raw.B, SpaceByte):]...)
+	indexS := bytes.Index(REQ.Header.raw, SpaceByte)
+	REQ.Header.raw = append([]byte(strings.ToUpper(METHOD)), REQ.Header.raw[indexS:]...)
+	REQ.Header.position -= indexS
+	REQ.Header.position += len(METHOD)
 }
 
 func (REQ *RequestType) SetURL(Url string) {
@@ -90,35 +91,60 @@ func (REQ *RequestType) SetURL(Url string) {
 		query = nil
 	}
 
-	REQ.Header.raw.B = bytes.Replace(REQ.Header.raw.B, REQ.Header.raw.B[bytes.Index(REQ.Header.raw.B, SpaceByte)+1:bytes.Index(REQ.Header.raw.B, httpVersion)-1], api, 1)
+	indexSpaceOne := bytes.Index(REQ.Header.raw, SpaceByte) + 1
+	indexSpaceTow := bytes.Index(REQ.Header.raw[indexSpaceOne:], SpaceByte) + indexSpaceOne
+	REQ.Header.position -= len(REQ.Header.raw[indexSpaceOne:indexSpaceTow])
+	REQ.Header.position += len(api)
+
+	REQ.Header.raw = append(REQ.Header.raw[:indexSpaceOne], append(api, REQ.Header.raw[indexSpaceTow:]...)...)
 	REQ.Header.Set("Host", REQ.Header.myhost)
 }
 
 func (REQ *ConnectionInformation) Set(key string, value string) {
-	REQ.Del(key)
-	reqLineEnd := bytes.Index(REQ.raw.B, lines[5:])
-	if reqLineEnd != -1 {
-		insertPos := reqLineEnd + 2
-		REQ.raw.B = append(REQ.raw.B[:insertPos], append([]byte(key+": "+value+"\r\n"), REQ.raw.B[insertPos:]...)...)
+	indexKey := bytes.Index(REQ.raw, append(lines[5:], []byte(key)...)) + 2
+	if indexKey != 1 {
+		indexRN := bytes.Index(REQ.raw[indexKey:], lines[5:]) + indexKey
+		REQ.position -= len(REQ.raw[indexKey:indexRN])
+		REQ.position += 2 + len(key) + len(value)
+		REQ.raw = append(REQ.raw[:indexKey], append([]byte(key+": "+value), REQ.raw[indexRN:]...)...)
+	} else {
+		indexRN := bytes.Index(REQ.raw, lines[5:])
+		REQ.position += 4 + len(key) + len(value)
+		REQ.raw = append(REQ.raw[:indexRN+2], append([]byte(key+": "+value), REQ.raw[indexRN:]...)...)
 	}
 }
 
 func (REQ *ConnectionInformation) Del(key string) {
-	start := bytes.Index(REQ.raw.B, []byte(key))
-	if start != -1 {
-		end := bytes.Index(REQ.raw.B[start:], []byte(lines[5:]))
-		end += start + 2
-		REQ.raw.B = append(REQ.raw.B[:start], REQ.raw.B[end:]...)
+	indexKey := bytes.Index(REQ.raw, []byte(key))
+	if indexKey != -1 {
+		indexRN := bytes.Index(REQ.raw[indexKey:], lines[5:]) + indexKey + 2
+		REQ.position -= len(REQ.raw[indexKey:indexRN])
+		REQ.raw = append(REQ.raw[:indexKey], REQ.raw[indexRN:]...)
 	}
 }
 
 func (REQ *RequestType) SetBody(RawBody []byte) {
-	REQ.Header.Del("Content-Length")
-	sepIndex := bytes.Index(REQ.Header.raw.B, lines[3:])
-	REQ.Header.raw.B = append(REQ.Header.raw.B[:sepIndex+2], contentLengthKey...)
-	REQ.Header.raw.B = append(REQ.Header.raw.B, intToB(len(RawBody))...)
-	REQ.Header.raw.B = append(REQ.Header.raw.B, lines[3:]...)
-	REQ.Header.raw.B = append(REQ.Header.raw.B, RawBody...)
+	indexL := bytes.Index(REQ.Header.raw, contentLengthKey)
+	contentLength := intToB(len(RawBody))
+	if indexL != -1 {
+		indexN := bytes.Index(REQ.Header.raw[indexL:], lines[5:]) + indexL
+		copy(REQ.Header.raw[indexL+16+len(contentLength):], REQ.Header.raw[indexL+16+len(REQ.Header.raw[indexL+16:indexN]):])
+		copy(REQ.Header.raw[indexL+16:], contentLength)
+		indexB := bytes.Index(REQ.Header.raw, lines[3:]) + 4
+		copy(REQ.Header.raw[indexB:], RawBody)
+		REQ.Header.position += len(contentLength) - len(REQ.Header.raw[indexL+16:indexN])
+		REQ.Header.position -= len(REQ.Header.raw[indexB:REQ.Header.position]) - len(RawBody)
+	} else {
+		indexR := bytes.Index(REQ.Header.raw, lines[3:])
+		copy(REQ.Header.raw[indexR+2:], contentLengthKey)
+		REQ.Header.position += len(contentLengthKey) - 2
+		copy(REQ.Header.raw[REQ.Header.position:], contentLength)
+		REQ.Header.position += len(contentLength)
+		copy(REQ.Header.raw[REQ.Header.position:], lines[3:])
+		REQ.Header.position += 4
+		copy(REQ.Header.raw[REQ.Header.position:], RawBody)
+		REQ.Header.position += len(RawBody)
+	}
 }
 
 func (REQ *RequestType) SetBodyString(RawBody string) {
@@ -134,9 +160,9 @@ func (REQ *ConnectionInformation) Remove(key string) {
 }
 
 func (REQ *RequestType) RawString() string {
-	return REQ.Header.raw.String()
+	return string(REQ.Header.raw[:REQ.Header.position])
 }
 
 func (REQ *RequestType) Raw() []byte {
-	return REQ.Header.raw.B
+	return REQ.Header.raw[:REQ.Header.position]
 }

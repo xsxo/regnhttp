@@ -269,7 +269,7 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 	}
 
 	c.run = true
-	if _, err := c.flusher.Write(REQ.Header.raw.B); err != nil {
+	if _, err := c.flusher.Write(REQ.Header.raw[:REQ.Header.position]); err != nil {
 		c.Close()
 		return err
 	}

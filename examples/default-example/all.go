@@ -24,7 +24,7 @@ func Example() {
 	// ex: clt.Proxy("http://username:password@localhost:11")
 
 	// create request object
-	req := regn.Request()
+	req := regn.Request(4 * 1024)
 	defer req.Close()
 
 	// create response object with buffer size
