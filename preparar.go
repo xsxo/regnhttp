@@ -3,7 +3,6 @@ package regn
 import (
 	"bytes"
 	"net/url"
-	"strings"
 )
 
 type ConnectionInformation struct {
@@ -44,9 +43,9 @@ func Request(bufferSize int) *RequestType {
 
 func (REQ *RequestType) SetMethod(METHOD string) {
 	indexS := bytes.Index(REQ.Header.raw, SpaceByte)
-	REQ.Header.raw = append([]byte(strings.ToUpper(METHOD)), REQ.Header.raw[indexS:]...)
-	REQ.Header.position -= indexS
-	REQ.Header.position += len(METHOD)
+	copy(REQ.Header.raw[len(METHOD):], REQ.Header.raw[indexS:])
+	copy(REQ.Header.raw, bytes.ToUpper([]byte(METHOD)))
+	REQ.Header.position += len(METHOD) - indexS
 }
 
 func (REQ *RequestType) SetURL(Url string) {
@@ -87,17 +86,14 @@ func (REQ *RequestType) SetURL(Url string) {
 	}
 
 	if Parse.RawQuery != "" {
-		query := []byte("?" + Parse.RawQuery)
-		api = append(api, query...)
-		query = nil
+		copy(api, []byte("?"+Parse.RawQuery))
 	}
 
 	indexSpaceOne := bytes.Index(REQ.Header.raw, SpaceByte) + 1
 	indexSpaceTow := bytes.Index(REQ.Header.raw[indexSpaceOne:], SpaceByte) + indexSpaceOne
-	REQ.Header.position -= len(REQ.Header.raw[indexSpaceOne:indexSpaceTow])
-	REQ.Header.position += len(api)
-
-	REQ.Header.raw = append(REQ.Header.raw[:indexSpaceOne], append(api, REQ.Header.raw[indexSpaceTow:]...)...)
+	copy(REQ.Header.raw[indexSpaceOne+len(api):], REQ.Header.raw[indexSpaceOne+len(REQ.Header.raw[indexSpaceOne:indexSpaceTow]):])
+	copy(REQ.Header.raw[indexSpaceOne:], api)
+	REQ.Header.position += len(api) - len(REQ.Header.raw[indexSpaceOne:indexSpaceTow])
 	REQ.Header.Set("Host", REQ.Header.myhost)
 }
 
@@ -120,7 +116,7 @@ func (REQ *ConnectionInformation) Del(key string) {
 	if indexKey != -1 {
 		indexRN := bytes.Index(REQ.raw[indexKey:], lines[5:]) + indexKey + 2
 		REQ.position -= len(REQ.raw[indexKey:indexRN])
-		REQ.raw = append(REQ.raw[:indexKey], REQ.raw[indexRN:]...)
+		copy(REQ.raw[indexKey:], REQ.raw[indexRN:])
 	}
 }
 
