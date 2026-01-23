@@ -12,7 +12,7 @@ go get -u github.com/xsxo/regnhttp
 
 ## update
 ```
-go get -u github.com/xsxo/regnhttp@lastet
+go get -u github.com/xsxo/regnhttp@latest
 ```
 
 ## Features
