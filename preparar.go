@@ -98,16 +98,22 @@ func (REQ *RequestType) SetURL(Url string) {
 }
 
 func (REQ *ConnectionInformation) Set(key string, value string) {
-	indexKey := bytes.Index(REQ.raw, append(lines[5:], []byte(key)...)) + 2
+	key += ": "
+	indexKey := bytes.Index(REQ.raw, []byte("\r\n"+key)) + 2
 	if indexKey != 1 {
-		indexRN := bytes.Index(REQ.raw[indexKey:], lines[5:]) + indexKey
-		REQ.position -= len(REQ.raw[indexKey:indexRN])
-		REQ.position += 2 + len(key) + len(value)
-		REQ.raw = append(REQ.raw[:indexKey], append([]byte(key+": "+value), REQ.raw[indexRN:]...)...)
+		indexN := bytes.Index(REQ.raw[indexKey:], lines[5:]) + indexKey
+		REQ.position += len(value) - len(REQ.raw[indexKey+len(key):indexN])
+		if len(value) > len(REQ.raw[indexKey+len(key):indexN]) {
+			REQ.raw = REQ.raw[:REQ.position]
+		}
+		copy(REQ.raw[indexKey+len(key)+len(value):], REQ.raw[indexKey+len(key)+len(REQ.raw[indexKey+len(key):indexN]):])
+		copy(REQ.raw[indexKey+len(key):], []byte(value))
 	} else {
 		indexRN := bytes.Index(REQ.raw, lines[5:])
-		REQ.position += 4 + len(key) + len(value)
-		REQ.raw = append(REQ.raw[:indexRN+2], append([]byte(key+": "+value), REQ.raw[indexRN:]...)...)
+		REQ.position += len(key) + len(value) + 2
+		REQ.raw = REQ.raw[:REQ.position]
+		copy(REQ.raw[indexRN+2+len(key)+len(value)+2:], REQ.raw[indexRN+2:])
+		copy(REQ.raw[indexRN+2:], []byte(key+value+"\r\n"))
 	}
 }
 
@@ -125,22 +131,26 @@ func (REQ *RequestType) SetBody(RawBody []byte) {
 	contentLength := intToB(len(RawBody))
 	if indexL != -1 {
 		indexN := bytes.Index(REQ.Header.raw[indexL:], lines[5:]) + indexL
+		REQ.Header.position += len(contentLength) - len(REQ.Header.raw[indexL+16:indexN])
+		REQ.Header.raw = REQ.Header.raw[:REQ.Header.position]
 		copy(REQ.Header.raw[indexL+16+len(contentLength):], REQ.Header.raw[indexL+16+len(REQ.Header.raw[indexL+16:indexN]):])
 		copy(REQ.Header.raw[indexL+16:], contentLength)
 		indexB := bytes.Index(REQ.Header.raw, lines[3:]) + 4
-		copy(REQ.Header.raw[indexB:], RawBody)
-		REQ.Header.position += len(contentLength) - len(REQ.Header.raw[indexL+16:indexN])
-		REQ.Header.position -= len(REQ.Header.raw[indexB:REQ.Header.position]) - len(RawBody)
+		REQ.Header.position += len(RawBody) - len(REQ.Header.raw[indexB:REQ.Header.position])
+		copy(REQ.Header.raw[indexB:REQ.Header.position], RawBody)
 	} else {
-		indexR := bytes.Index(REQ.Header.raw, lines[3:])
-		copy(REQ.Header.raw[indexR+2:], contentLengthKey)
-		REQ.Header.position += len(contentLengthKey) - 2
-		copy(REQ.Header.raw[REQ.Header.position:], contentLength)
-		REQ.Header.position += len(contentLength)
-		copy(REQ.Header.raw[REQ.Header.position:], lines[3:])
-		REQ.Header.position += 4
-		copy(REQ.Header.raw[REQ.Header.position:], RawBody)
+		// REQ.Header.Set("Content-Length", strconv.Itoa(len(RawBody)))
+		indexH := bytes.Index(REQ.Header.raw, lines[5:]) + 2
+		REQ.Header.position += len(contentLengthKey) + len(contentLength) + 2
+		REQ.Header.raw = REQ.Header.raw[:REQ.Header.position]
+		copy(REQ.Header.raw[indexH+len(contentLengthKey)+len(contentLength)+2:], REQ.Header.raw[indexH:])
+		copy(REQ.Header.raw[indexH:], contentLengthKey)
+		copy(REQ.Header.raw[indexH+16:], contentLength)
+		copy(REQ.Header.raw[indexH+16+len(contentLength):], lines[5:])
+		indexR := bytes.Index(REQ.Header.raw, lines[3:]) + 4
 		REQ.Header.position += len(RawBody)
+		REQ.Header.raw = REQ.Header.raw[:REQ.Header.position]
+		copy(REQ.Header.raw[indexR:], RawBody)
 	}
 }
 
