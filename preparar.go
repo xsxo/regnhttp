@@ -27,6 +27,8 @@ func (REQ *RequestType) Close() {
 func (REQ *RequestType) Reset() {
 	REQ.Header.raw = REQ.Header.raw[:0]
 	REQ.Header.raw = REQ.Header.raw[:REQ.Header.bufferSize]
+	copy(REQ.Header.raw[REQ.Header.position:], []byte("GET /golang HTTP/1.1\r\n"+"User-Agent: "+Name+"/"+Version+Author+"\r\n"+"Connection: Keep-Alive\r\n"+"\r\n"))
+	REQ.Header.position += 89
 }
 
 func Request(bufferSize int) *RequestType {

@@ -1,63 +1,35 @@
-## Faster than `net/http`
-REGN HTTP pkg focuses on leveraging all the features of `HTTP/2` and `HTTP/3` that are not available in net/http to achieve high performance</br>
-`net/http` uses a transport layer to switch between different HTTP versions, meaning you won't notice any difference when switching between versions in `net/http`.
-#### Missing feauters of HTTP/2 & HTTP/3 in `net/http`
-- Send & Read Multi Requests in same connection
-- Read the response later after Send the Request
-- Header Compression used Hpack & Qpack Algorithms
-- Support HTTP/2 & HTTP/3 Directly (Without Tansport)
+## `REGNHTTP`
+[![Go Reference](https://pkg.go.dev/badge/github.com/xsxo/regnhttp)](https://pkg.go.dev/github.com/xsxo/regnhttp)
+![Release](https://img.shields.io/github/v/release/xsxo/regnhttp)
+[![Go CI](https://github.com/xsxo/regnhttp/actions/workflows/go.yml/badge.svg)](https://github.com/xsxo/regnhttp/actions/workflows/go.yml)
+</br>
+**regnhttp is high performance http client (low level) [example](https://github.com/xsxo/regnhttp/tree/main/examples/default-example)**</br>
 
-net/http uses a `transport layer` to handle the transition between different HTTP versions (creating a layer that converts requests from HTTP/1.1 to other versions). This means that, essentially, you are using multiple HTTP versions to send a request, leading to greater resource consumption and not fully leveraging the advantages of newer HTTP versions.
-
-## Benchmarks multi streams
-regn client:
-```bash
-goos: linux
-goarch: amd64
-pkg: github.com/xsxo/regnhttp/benchmark-regnhttp
-cpu: AMD EPYC 7763 64-Core Processor                
-BenchmarkRegnhttp-4   	       1	   4972462 ns/op
-PASS
-ok  	github.com/xsxo/regnhttp/benchmark-regnhttp	0.013s
+## install package
+```
+go get -u github.com/xsxo/regnhttp
 ```
 
-fasthttp client:
-```bash
-goos: linux
-goarch: amd64
-pkg: benchmark
-cpu: AMD EPYC 7763 64-Core Processor                
-BenchmarkFasthttp-4   	       1	19938180508 ns/op
-PASS
-ok  	benchmark	19.943s
+## update
 ```
-
-net/http client:
-```bash
-goos: linux
-goarch: amd64
-pkg: benchmark
-cpu: AMD EPYC 7763 64-Core Processor                
-BenchmarkNethttp-4   	       1	20989279354 ns/op
-PASS
-ok  	benchmark	20.995s
+go get -u github.com/xsxo/regnhttp@lastet
 ```
-
-- The performance of regnhttp and fasthttp is very similar when using HTTP/1.1 only. This is because both libraries are built on the same performance optimization concepts.
-
-- There is no performance difference between HTTP versions on local servers. The difference will only be noticeable when sending requests to a remote server.
 
 ## Features
 - `Connect` Function (create connection with server before send requests)
 - Reuse Request & Response object instead of creating a new one
-- Reducing pressure on The Garbage Collector
-- Bulit in sync.Pool to Avoid Duplicating vars
-- No Thread Race | No Data Lose
-- Mulit Requests on Same Connection
-- Read the response later after Send the Request
-- Header Compression used Hpack & Qpack Algorithms
-- Support Proxy  Directly (Without Tansport)
-- Support Socks  Directly (Without Tansport) (soon...)
-- Support HTTP/2 Directly (Without Tansport)
-- Support HTTP/3 Directly (Without Tansport) (soon...)
-- Support Tansport (soon...)
+- Reuse the same buffer to Reducing pressure on The Garbage Collector by `sync.Pool`
+- No Thread Race | No Data Lose (all objects operate independently)
+- Full control of client buffer `cleint.WriteBufferSize` and `client.ReadBufferSize`
+- Full control of connection `client.Connection` & `client.TLSConfig` & `client.NagleOff`
+- Full control of objects buffer `Request(bufferSize)` and `Request(Response)`
+- Get the request & response as a raw `Request.Raw` & `Response.Raw`
+
+## May not for you
+- need to know the response & response buffer size
+- no support pool connections (to avoid keep save open dead connections) 
+- no support streaming requests
+- no support compresser responses
+
+! regnhttp package is for normal requests & responses `not for full http protocol supported`</br>
+for another status maybe nethttp is good choice for full http protocol supported.

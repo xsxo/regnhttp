@@ -24,10 +24,14 @@ func Example() {
 	// ex: clt.Proxy("http://username:password@localhost:11")
 
 	// create request object
+	// 4 * 1024 is the buffer size of request (length of raw request)
+	// use len(raw.Request()) to get buffer size of request
 	req := regn.Request(4 * 1024)
 	defer req.Close()
 
 	// create response object with buffer size
+	// 4 * 1024 is the buffer size of response (length of raw response)
+	// use len(raw.Response()) to get buffer size of response
 	res := regn.Response(4 * 1024)
 	defer res.Close()
 
