@@ -61,14 +61,14 @@ func genFlusher(writer io.Writer, size int) *bufio.Writer {
 	return nww
 }
 
-func intToBool(b bool) int {
+func IntToBool(b bool) int {
 	if b {
 		return 1
 	}
 	return 0
 }
 
-func bToInt(b []byte) int {
+func BytesToInt(b []byte) int {
 	n := 0
 	for i := 0; i < len(b); i++ {
 		n = n*10 + int(b[i]-'0')
@@ -76,7 +76,7 @@ func bToInt(b []byte) int {
 	return n
 }
 
-func intToB(n int) []byte {
+func IntToBytes(n int) []byte {
 	if n == 0 {
 		return []byte{'0'}
 	}
@@ -91,4 +91,43 @@ func intToB(n int) []byte {
 	}
 
 	return buf[i:]
+}
+
+func IntToString(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	neg := n < 0
+	if neg {
+		n = -n
+	}
+	buf := [20]byte{}
+	i := len(buf)
+
+	for n > 0 {
+		i--
+		buf[i] = byte('0' + n%10)
+		n /= 10
+	}
+	if neg {
+		i--
+		buf[i] = '-'
+	}
+	return string(buf[i:])
+}
+
+func StringToInt(s string) int {
+	if len(s) == 0 {
+		return 0
+	}
+
+	n := 0
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c < '0' || c > '9' {
+			return 0
+		}
+		n = n*10 + int(c-'0')
+	}
+	return n
 }

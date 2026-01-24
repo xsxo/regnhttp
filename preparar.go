@@ -48,6 +48,9 @@ func (REQ *RequestType) SetMethod(METHOD string) {
 	copy(REQ.Header.raw[len(METHOD):], REQ.Header.raw[indexS:])
 	copy(REQ.Header.raw, bytes.ToUpper([]byte(METHOD)))
 	REQ.Header.position += len(METHOD) - indexS
+	if REQ.Header.position > REQ.Header.bufferSize {
+		panic("regn.Request " + IntToString(REQ.Header.bufferSize) + " buffer is small\nupper it to " + IntToString(REQ.Header.position))
+	}
 }
 
 func (REQ *RequestType) SetURL(Url string) {
@@ -96,6 +99,9 @@ func (REQ *RequestType) SetURL(Url string) {
 	copy(REQ.Header.raw[indexSpaceOne+len(api):], REQ.Header.raw[indexSpaceOne+len(REQ.Header.raw[indexSpaceOne:indexSpaceTow]):])
 	copy(REQ.Header.raw[indexSpaceOne:], api)
 	REQ.Header.position += len(api) - len(REQ.Header.raw[indexSpaceOne:indexSpaceTow])
+	if REQ.Header.position > REQ.Header.bufferSize {
+		panic("regn.Request " + IntToString(REQ.Header.bufferSize) + " buffer is small\nupper it to " + IntToString(REQ.Header.position))
+	}
 	REQ.Header.Set("Host", REQ.Header.myhost)
 }
 
@@ -105,6 +111,9 @@ func (REQ *ConnectionInformation) Set(key string, value string) {
 	if indexKey != 1 {
 		indexN := bytes.Index(REQ.raw[indexKey:], lines[5:]) + indexKey
 		REQ.position += len(value) - len(REQ.raw[indexKey+len(key):indexN])
+		if REQ.position > REQ.bufferSize {
+			panic("regn.Request " + IntToString(REQ.bufferSize) + " buffer is small\nupper it to " + IntToString(REQ.position))
+		}
 		if len(value) > len(REQ.raw[indexKey+len(key):indexN]) {
 			REQ.raw = REQ.raw[:REQ.position]
 		}
@@ -113,6 +122,9 @@ func (REQ *ConnectionInformation) Set(key string, value string) {
 	} else {
 		indexRN := bytes.Index(REQ.raw, lines[5:])
 		REQ.position += len(key) + len(value) + 2
+		if REQ.position > REQ.bufferSize {
+			panic("regn.Request " + IntToString(REQ.bufferSize) + " buffer is small\nupper it to " + IntToString(REQ.position))
+		}
 		REQ.raw = REQ.raw[:REQ.position]
 		copy(REQ.raw[indexRN+2+len(key)+len(value)+2:], REQ.raw[indexRN+2:])
 		copy(REQ.raw[indexRN+2:], []byte(key+value+"\r\n"))
@@ -130,7 +142,7 @@ func (REQ *ConnectionInformation) Del(key string) {
 
 func (REQ *RequestType) SetBody(RawBody []byte) {
 	indexL := bytes.Index(REQ.Header.raw, contentLengthKey)
-	contentLength := intToB(len(RawBody))
+	contentLength := IntToBytes(len(RawBody))
 	if indexL != -1 {
 		indexN := bytes.Index(REQ.Header.raw[indexL:], lines[5:]) + indexL
 		REQ.Header.position += len(contentLength) - len(REQ.Header.raw[indexL+16:indexN])
@@ -139,6 +151,9 @@ func (REQ *RequestType) SetBody(RawBody []byte) {
 		copy(REQ.Header.raw[indexL+16:], contentLength)
 		indexB := bytes.Index(REQ.Header.raw, lines[3:]) + 4
 		REQ.Header.position += len(RawBody) - len(REQ.Header.raw[indexB:REQ.Header.position])
+		if REQ.Header.position > REQ.Header.bufferSize {
+			panic("regn.Request " + IntToString(REQ.Header.bufferSize) + " buffer is small\nupper it to " + IntToString(REQ.Header.position))
+		}
 		copy(REQ.Header.raw[indexB:REQ.Header.position], RawBody)
 	} else {
 		// REQ.Header.Set("Content-Length", strconv.Itoa(len(RawBody)))
@@ -151,6 +166,9 @@ func (REQ *RequestType) SetBody(RawBody []byte) {
 		copy(REQ.Header.raw[indexH+16+len(contentLength):], lines[5:])
 		indexR := bytes.Index(REQ.Header.raw, lines[3:]) + 4
 		REQ.Header.position += len(RawBody)
+		if REQ.Header.position > REQ.Header.bufferSize {
+			panic("regn.Request " + IntToString(REQ.Header.bufferSize) + " buffer is small\nupper it to " + IntToString(REQ.Header.position))
+		}
 		REQ.Header.raw = REQ.Header.raw[:REQ.Header.position]
 		copy(REQ.Header.raw[indexR:], RawBody)
 	}

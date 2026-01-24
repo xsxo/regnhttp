@@ -1,7 +1,7 @@
 ## `REGNHTTP`
+[![CI](https://github.com/xsxo/regnhttp/actions/workflows/go.yml/badge.svg)](https://github.com/xsxo/regnhttp/actions/workflows/go.yml)
 [![Go Reference](https://pkg.go.dev/badge/github.com/xsxo/regnhttp)](https://pkg.go.dev/github.com/xsxo/regnhttp)
-![Release](https://img.shields.io/github/v/release/xsxo/regnhttp)
-[![Go CI](https://github.com/xsxo/regnhttp/actions/workflows/go.yml/badge.svg)](https://github.com/xsxo/regnhttp/actions/workflows/go.yml)
+![Release](https://img.shields.io/github/v/release/xsxo/regnhttp?color=007d9c)
 </br>
 **regnhttp is high performance http client (low level) [example](https://github.com/xsxo/regnhttp/tree/main/examples/default-example)**</br>
 

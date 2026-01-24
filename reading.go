@@ -48,7 +48,7 @@ func (RES *ResponseType) StatusCodeString() string {
 }
 
 func (RES *ResponseType) StatusCodeInt() int {
-	return bToInt(RES.StatusCode())
+	return BytesToInt(RES.StatusCode())
 }
 
 func (RES *ResponseType) Reason() []byte {

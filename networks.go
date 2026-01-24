@@ -81,11 +81,9 @@ func (c *Client) connectNet(host string, port string) error {
 		return &RegnError{Message: "field create connection with '" + host + ":" + port + "' address\n" + err.Error()}
 	}
 
-	// c.NetConnection.(*net.TCPConn).SetKeepAlive(true)
-
-	// c.NetConnection.(*net.TCPConn).SetReadBuffer(c.ReadBufferSize)
-	// c.NetConnection.(*net.TCPConn).SetWriteBuffer(c.WriteBufferSize)
-
+	c.NetConnection.(*net.TCPConn).SetKeepAlive(true)
+	c.NetConnection.(*net.TCPConn).SetReadBuffer(c.ReadBufferSize)
+	c.NetConnection.(*net.TCPConn).SetWriteBuffer(c.WriteBufferSize)
 	c.NetConnection.SetReadDeadline(time.Now().Add(c.TimeoutRead))
 
 	if c.SetNoDelay || c.NagleOff {
@@ -295,7 +293,7 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 			}
 			bufferd = c.peeker.Buffered()
 		} else {
-			bufferd = []int{contentLength, c.ReadBufferSize}[intToBool(contentLength > c.ReadBufferSize)]
+			bufferd = []int{contentLength, c.ReadBufferSize}[IntToBool(contentLength > c.ReadBufferSize)]
 		}
 
 		raw, _ := c.peeker.Peek(bufferd)
@@ -319,7 +317,7 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 				continue
 			}
 			indexRN := bytes.Index(RES.Header.theBuffer[indexL:], lines[5:]) + indexL
-			contentLength = bToInt(RES.Header.theBuffer[indexL:indexRN])
+			contentLength = BytesToInt(RES.Header.theBuffer[indexL:indexRN])
 			contentLength -= len(raw[indexB+4:])
 		} else if contentLength > 0 {
 			contentLength -= len(raw)
