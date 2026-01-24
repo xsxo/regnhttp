@@ -26,11 +26,11 @@ jobs:
     - name: mod tidy main
       run: go mod tidy
 
-    - name: mod tidy benchmarks
-      run: |
-        cd benchmark
-        go mod tidy
-        cd ..
+    # - name: mod tidy benchmarks
+    #   run: |
+    #     cd benchmark
+    #     go mod tidy
+    #     cd ..
 
     - name: Build
       run: go build -v ./...
