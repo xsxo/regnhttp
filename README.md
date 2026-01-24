@@ -31,5 +31,5 @@ go get -u github.com/xsxo/regnhttp@latest
 - no support streaming requests
 - no support compresser responses
 
-! regnhttp package is for normal requests & responses `not for full http protocol supported`</br>
-for another status maybe nethttp is good choice for full http protocol supported.
+! the regnhttp package is for normal requests & responses, not for full HTTP protocol support.
+For other use cases, net/http may be a better choice, as it fully supports the HTTP protocol
