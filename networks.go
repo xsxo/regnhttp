@@ -81,9 +81,9 @@ func (c *Client) connectNet(host string, port string) error {
 		return &RegnError{Message: "field create connection with '" + host + ":" + port + "' address\n" + err.Error()}
 	}
 
-	c.NetConnection.(*net.TCPConn).SetKeepAlive(true)
-	c.NetConnection.(*net.TCPConn).SetReadBuffer(c.ReadBufferSize)
-	c.NetConnection.(*net.TCPConn).SetWriteBuffer(c.WriteBufferSize)
+	// c.NetConnection.(*net.TCPConn).SetKeepAlive(true)
+	// c.NetConnection.(*net.TCPConn).SetReadBuffer(c.ReadBufferSize)
+	// c.NetConnection.(*net.TCPConn).SetWriteBuffer(c.WriteBufferSize)
 	c.NetConnection.SetReadDeadline(time.Now().Add(c.TimeoutRead))
 
 	if c.SetNoDelay || c.NagleOff {
