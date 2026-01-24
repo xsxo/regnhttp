@@ -87,7 +87,7 @@
 - Fix reading response algorithm
 - Added `Request.Raw` and `Request.RawString` function's
 
-# v2.0.0 (26/1/17)
+# v1.20.0 (26/1/24)
 - Remove all http2 functions
 - Remove `response.BodyJson` function
 - Remove `request.SetBodyJson` function
