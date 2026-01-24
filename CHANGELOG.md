@@ -96,3 +96,4 @@
 - Added `response.StatusCode` & `response.StatusCodeString` & `response.StatusCodeInt` 
 - Added `response.Reason` & `response.ReasonString`
 - Added `client.SetNoDelay` & `NagleOff` to off nagle algorithm
+- Added `StringToInt` & `IntToString` & `BytesToInt` & `IntToBytes` functions
