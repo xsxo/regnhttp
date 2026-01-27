@@ -161,7 +161,7 @@ func (REQ *RequestType) SetBody(RawBody []byte) {
 		REQ.Header.position += len(RawBody) - len(REQ.Header.raw[indexB:REQ.Header.position])
 		if REQ.Header.position > REQ.Header.bufferSize {
 			panic("regn.Request " + IntToString(REQ.Header.bufferSize) + " buffer is small\nupper it to " + IntToString(REQ.Header.position))
-		} else if len(RawBody) > len(REQ.Header.raw[indexB:REQ.Header.position]) {
+		} else if len(RawBody) > len(REQ.Header.raw[indexB:]) {
 			REQ.Header.raw = REQ.Header.raw[:REQ.Header.position]
 		}
 		copy(REQ.Header.raw[indexB:REQ.Header.position], RawBody)
