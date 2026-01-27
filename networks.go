@@ -321,9 +321,9 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 			contentLength -= len(raw[indexB+4:])
 		} else if contentLength > 0 {
 			contentLength -= len(raw)
-		} else if raw[len(raw)-1] == 125 {
+		} else if bytes.Contains(RES.Header.theBuffer, lines) {
 			break
-		} else if bytes.Contains(raw, lines) {
+		} else if raw[len(raw)-1] == 125 {
 			break
 		}
 	}
