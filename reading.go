@@ -56,7 +56,7 @@ func (RES *ResponseType) Reason() []byte {
 	if index1 == -1 {
 		return nil
 	}
-	return RES.Header.theBuffer[index1+1 : bytes.Index(RES.Header.theBuffer, lines[5:])]
+	return RES.Header.theBuffer[index1+1 : bytes.Index(RES.Header.theBuffer, RN)]
 }
 
 func (RES *ResponseType) ReasonString() string {
@@ -68,7 +68,7 @@ func (RES *ResponseType) BodyString() string {
 }
 
 func (RES *ResponseType) Body() []byte {
-	idx := bytes.Index(RES.Header.theBuffer, lines[3:])
+	idx := bytes.Index(RES.Header.theBuffer, RNRN)
 	if idx == -1 {
 		return nil
 	}

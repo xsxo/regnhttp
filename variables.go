@@ -15,10 +15,9 @@ var (
 	flusherPool *sync.Pool = &sync.Pool{}
 
 	contentLengthKey []byte = []byte{67, 111, 110, 116, 101, 110, 116, 45, 76, 101, 110, 103, 116, 104, 58, 32}
-
-	lines       []byte = []byte{13, 10, 48, 13, 10, 13, 10}
-	SpaceByte   []byte = []byte(" ")
-	httpVersion []byte = []byte("HTTP/1.1")
+	RNRN             []byte = []byte("\r\n\r\n")
+	RN               []byte = []byte("\r\n")
+	SpaceByte        []byte = []byte(" ")
 )
 
 const (
@@ -130,4 +129,22 @@ func StringToInt(s string) int {
 		n = n*10 + int(c-'0')
 	}
 	return n
+}
+
+func hexBytesToInt(b []byte) (int, bool) {
+	n := 0
+	for _, c := range b {
+		n <<= 4
+		switch {
+		case c >= '0' && c <= '9':
+			n |= int(c - '0')
+		case c >= 'a' && c <= 'f':
+			n |= int(c - 'a' + 10)
+		case c >= 'A' && c <= 'F':
+			n |= int(c - 'A' + 10)
+		default:
+			return 0, false
+		}
+	}
+	return n, true
 }

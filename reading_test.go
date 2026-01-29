@@ -15,13 +15,13 @@ func TestReading(t *testing.T) {
 	r.Header.Add("Lang", "Python3")
 	r.SetBodyString("Hi From FirstBody")
 
-	if !strings.Contains(string(r.Header.raw), "Lang: Python3\r\n") {
+	if !strings.Contains(r.RawString(), "Lang: Python3\r\n") {
 		t.Error("Request.Header.Add function 0")
-	} else if !strings.Contains(string(r.Header.raw), "\r\n\r\nHi From FirstBody") {
+	} else if !strings.Contains(r.RawString(), "\r\n\r\nHi From FirstBody") {
 		t.Error("Request.SetBodyString function 0")
-	} else if !strings.Contains(string(r.Header.raw), "POST") {
+	} else if !strings.Contains(r.RawString(), "POST") {
 		t.Error("Request.SetMethod function 0")
-	} else if !strings.Contains(string(r.Header.raw), "/python3") {
+	} else if !strings.Contains(r.RawString(), "/python3") {
 		t.Error("Request.SetURL function 0")
 	}
 
@@ -50,13 +50,13 @@ func TestReading(t *testing.T) {
 		t.Error("Response.Header.GET function 1")
 	}
 
-	if !strings.Contains(string(r.Header.raw), "Lang: Golang\r\n") || strings.Contains(string(r.Header.raw), "Lang: Python3\r\n") {
+	if !strings.Contains(r.RawString(), "Lang: Golang\r\n") || strings.Contains(r.RawString(), "Lang: Python3\r\n") {
 		t.Error("Request.Header.Add function 1")
-	} else if !strings.Contains(string(r.Header.raw), "\r\n\r\nHi From LastBody") || strings.Contains(string(r.Header.raw), "\r\n\r\nHi From FirstBody") {
+	} else if !strings.Contains(r.RawString(), "\r\n\r\nHi From LastBody") || strings.Contains(r.RawString(), "\r\n\r\nHi From FirstBody") {
 		t.Error("Request.SetBodyString function 1")
-	} else if !strings.Contains(string(r.Header.raw), "PUT") || strings.Contains(string(r.Header.raw), "POST") {
+	} else if !strings.Contains(r.RawString(), "PUT") || strings.Contains(r.RawString(), "POST") {
 		t.Error("Request.SetMethod function 1")
-	} else if !strings.Contains(string(r.Header.raw), "/golang") || strings.Contains(string(r.Header.raw), "/python3") {
+	} else if !strings.Contains(r.RawString(), "/golang") || strings.Contains(r.RawString(), "/python3") {
 		t.Error("Request.SetURL function 1")
 	}
 

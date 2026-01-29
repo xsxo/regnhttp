@@ -282,49 +282,104 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 	RES.Header.theBuffer = RES.Header.theBuffer[:0]
 	RES.Header.theBuffer = RES.Header.theBuffer[:RES.Header.bufferSize]
 
-	var indexB int
+	var chunkedB bool
+	var chunked int = -1
+	var indexRNRN int = -1
 	var bufferd int
 	var contentLength int = -1
 	for contentLength != 0 {
-		if contentLength == -1 {
+		if contentLength > 0 {
+			if c.ReadBufferSize > contentLength {
+				bufferd = contentLength
+			} else {
+				bufferd = c.ReadBufferSize
+			}
+			contentLength -= bufferd
+		} else if chunked > 0 {
+			if c.ReadBufferSize > chunked {
+				bufferd = chunked
+			} else {
+				bufferd = c.ReadBufferSize
+			}
+			chunked -= bufferd
+		} else {
 			if _, err := c.peeker.Peek(1); err != nil {
 				c.Close()
 				return err
 			}
 			bufferd = c.peeker.Buffered()
-		} else {
-			bufferd = []int{contentLength, c.ReadBufferSize}[IntToBool(contentLength > c.ReadBufferSize)]
 		}
 
-		raw, _ := c.peeker.Peek(bufferd)
-		c.peeker.Discard(bufferd)
+		raw, err := c.peeker.Peek(bufferd)
+		if err != nil {
+			return err
+		}
+
+		_, err = c.peeker.Discard(bufferd)
+		if err != nil {
+			return err
+		}
 
 		if RES.Header.position+bufferd < RES.Header.bufferSize {
 			copy(RES.Header.theBuffer[RES.Header.position:], raw)
 			RES.Header.position += bufferd
+		} else {
+			RES.Header.theBuffer = append(RES.Header.theBuffer, raw...)
+			RES.Header.position += bufferd
+			RES.Header.bufferSize += bufferd
 		}
 
-		if indexB == 0 && contentLength == -1 {
-			indexB = bytes.Index(raw, lines[3:])
-			if indexB == -1 {
+		if chunkedB && chunked <= 0 {
+			for {
+				if indexRNRN > RES.Header.position {
+					break
+				}
+
+				rn := bytes.Index(RES.Header.theBuffer[indexRNRN:RES.Header.position], []byte("\r\n"))
+				if rn == -1 {
+					break
+				}
+
+				start := indexRNRN
+				end := indexRNRN + rn
+				hex, b := hexBytesToInt(RES.Header.theBuffer[start:end])
+				if !b || hex == 0 {
+					contentLength = 0
+					break
+				} else if hex == 0 {
+					contentLength = 0
+					break
+				}
+
+				if len(RES.Header.theBuffer[end+2:RES.Header.position]) > int(hex) {
+					chunked = 0
+				} else {
+					chunked = int(hex) - len(RES.Header.theBuffer[end+2:RES.Header.position])
+				}
+
+				indexRNRN += int(hex) + 4 + len(RES.Header.theBuffer[start:end])
+				break
+			}
+			continue
+		}
+		if indexRNRN == -1 {
+			indexRNRN = bytes.Index(RES.Header.theBuffer[:RES.Header.position], []byte("\r\n\r\n"))
+			if indexRNRN == -1 {
 				continue
 			}
-			indexL := bytes.Index(RES.Header.theBuffer, contentLengthKey) + 16
+
+			indexL := bytes.Index(RES.Header.theBuffer[:RES.Header.position], contentLengthKey) + 16
 			if indexL == 15 {
-				if raw[len(raw)-1] == 125 {
-					break
+				if bytes.Contains(RES.Header.theBuffer[:indexRNRN], []byte("Transfer-Encoding: chunked")) {
+					chunkedB = true
+					indexRNRN += 4
+					continue
 				}
 				continue
 			}
-			indexRN := bytes.Index(RES.Header.theBuffer[indexL:], lines[5:]) + indexL
+			indexRN := bytes.Index(RES.Header.theBuffer[indexL:], RN) + indexL
 			contentLength = BytesToInt(RES.Header.theBuffer[indexL:indexRN])
-			contentLength -= len(raw[indexB+4:])
-		} else if contentLength > 0 {
-			contentLength -= len(raw)
-		} else if bytes.Contains(RES.Header.theBuffer, lines) {
-			break
-		} else if raw[len(raw)-1] == 125 {
-			break
+			contentLength -= len(RES.Header.theBuffer[indexRNRN+4 : RES.Header.position])
 		}
 	}
 
