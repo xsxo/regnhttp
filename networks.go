@@ -7,7 +7,6 @@ import (
 	"encoding/base64"
 	"net"
 	"net/url"
-	"os"
 	"time"
 )
 
@@ -360,10 +359,6 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 				break
 			}
 			continue
-		}
-
-		if indexRNRN != -1 {
-			os.Exit(1)
 		}
 
 		if indexRNRN == -1 {
