@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"net"
 	"net/url"
+	"os"
 	"time"
 )
 
@@ -81,14 +82,11 @@ func (c *Client) connectNet(host string, port string) error {
 		return &RegnError{Message: "field create connection with '" + host + ":" + port + "' address\n" + err.Error()}
 	}
 
-	// c.NetConnection.(*net.TCPConn).SetKeepAlive(true)
-	// c.NetConnection.(*net.TCPConn).SetReadBuffer(c.ReadBufferSize)
-	// c.NetConnection.(*net.TCPConn).SetWriteBuffer(c.WriteBufferSize)
-	c.NetConnection.SetReadDeadline(time.Now().Add(c.TimeoutRead))
-
-	if c.SetNoDelay || c.NagleOff {
+	if (c.SetNoDelay || c.NagleOff) && port != "443" {
 		c.NetConnection.(*net.TCPConn).SetNoDelay(true)
 	}
+
+	c.NetConnection.SetReadDeadline(time.Now().Add(c.TimeoutRead))
 
 	c.createLines()
 	return nil
@@ -335,13 +333,14 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 					break
 				}
 
-				rn := bytes.Index(RES.Header.theBuffer[indexRNRN:RES.Header.position], []byte("\r\n"))
+				rn := bytes.Index(RES.Header.theBuffer[indexRNRN:RES.Header.position], line)
 				if rn == -1 {
 					break
 				}
 
 				start := indexRNRN
 				end := indexRNRN + rn
+
 				hex, b := hexBytesToInt(RES.Header.theBuffer[start:end])
 				if !b || hex == 0 {
 					contentLength = 0
@@ -351,33 +350,37 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 					break
 				}
 
-				if len(RES.Header.theBuffer[end+2:RES.Header.position]) > int(hex) {
+				if len(RES.Header.theBuffer[end+2:RES.Header.position]) > hex {
 					chunked = 0
 				} else {
-					chunked = int(hex) - len(RES.Header.theBuffer[end+2:RES.Header.position])
+					chunked = hex - len(RES.Header.theBuffer[end+2:RES.Header.position])
 				}
 
-				indexRNRN += int(hex) + 4 + len(RES.Header.theBuffer[start:end])
+				indexRNRN += hex + 4 + len(RES.Header.theBuffer[start:end])
 				break
 			}
 			continue
 		}
+
+		if indexRNRN != -1 {
+			os.Exit(1)
+		}
+
 		if indexRNRN == -1 {
-			indexRNRN = bytes.Index(RES.Header.theBuffer[:RES.Header.position], []byte("\r\n\r\n"))
+			indexRNRN = bytes.Index(RES.Header.theBuffer[:RES.Header.position], lines)
 			if indexRNRN == -1 {
 				continue
 			}
 
 			indexL := bytes.Index(RES.Header.theBuffer[:RES.Header.position], contentLengthKey) + 16
 			if indexL == 15 {
-				if bytes.Contains(RES.Header.theBuffer[:indexRNRN], []byte("Transfer-Encoding: chunked")) {
+				if bytes.Contains(RES.Header.theBuffer[:indexRNRN], chunkedValue) {
 					chunkedB = true
 					indexRNRN += 4
-					continue
 				}
 				continue
 			}
-			indexRN := bytes.Index(RES.Header.theBuffer[indexL:], RN) + indexL
+			indexRN := bytes.Index(RES.Header.theBuffer[indexL:], line) + indexL
 			contentLength = BytesToInt(RES.Header.theBuffer[indexL:indexRN])
 			contentLength -= len(RES.Header.theBuffer[indexRNRN+4 : RES.Header.position])
 		}

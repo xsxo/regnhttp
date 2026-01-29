@@ -14,10 +14,11 @@ var (
 	peekerPool  *sync.Pool = &sync.Pool{}
 	flusherPool *sync.Pool = &sync.Pool{}
 
-	contentLengthKey []byte = []byte{67, 111, 110, 116, 101, 110, 116, 45, 76, 101, 110, 103, 116, 104, 58, 32}
-	RNRN             []byte = []byte("\r\n\r\n")
-	RN               []byte = []byte("\r\n")
-	SpaceByte        []byte = []byte(" ")
+	contentLengthKey []byte = []byte("Content-Length: ")
+	chunkedValue            = []byte(": chunked")
+	lines            []byte = []byte("\r\n\r\n")
+	line             []byte = []byte("\r\n")
+	spaceByte        []byte = []byte(" ")
 )
 
 const (
@@ -58,13 +59,6 @@ func genFlusher(writer io.Writer, size int) *bufio.Writer {
 	nww, _ := nw.(*bufio.Writer)
 	nww.Reset(writer)
 	return nww
-}
-
-func IntToBool(b bool) int {
-	if b {
-		return 1
-	}
-	return 0
 }
 
 func BytesToInt(b []byte) int {

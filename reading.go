@@ -35,7 +35,7 @@ func (RES *ResponseType) StatusCode() []byte {
 		return nil
 	}
 
-	index2 := index1 + 1 + bytes.IndexByte(RES.Header.theBuffer[index1+1:], ' ')
+	index2 := index1 + 1 + bytes.IndexByte(RES.Header.theBuffer[index1+1:RES.Header.position], ' ')
 	if index2 == -1 {
 		return nil
 	}
@@ -56,7 +56,7 @@ func (RES *ResponseType) Reason() []byte {
 	if index1 == -1 {
 		return nil
 	}
-	return RES.Header.theBuffer[index1+1 : bytes.Index(RES.Header.theBuffer, RN)]
+	return RES.Header.theBuffer[index1+1 : bytes.Index(RES.Header.theBuffer, line)]
 }
 
 func (RES *ResponseType) ReasonString() string {
@@ -68,7 +68,7 @@ func (RES *ResponseType) BodyString() string {
 }
 
 func (RES *ResponseType) Body() []byte {
-	idx := bytes.Index(RES.Header.theBuffer, RNRN)
+	idx := bytes.Index(RES.Header.theBuffer, lines)
 	if idx == -1 {
 		return nil
 	}
