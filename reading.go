@@ -21,8 +21,10 @@ func (RES *ResponseType) Close() {
 }
 
 func (RES *ResponseType) Reset() {
-	RES.Header.theBuffer = RES.Header.theBuffer[:0]
-	RES.Header.theBuffer = RES.Header.theBuffer[:RES.Header.bufferSize]
+	for xo := 0; xo != RES.Header.position; xo++ {
+		RES.Header.theBuffer[xo] = 0x00
+	}
+	RES.Header.position = 0
 }
 
 func Response(bufferSize int) *ResponseType {

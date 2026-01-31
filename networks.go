@@ -41,6 +41,9 @@ type Client struct {
 	SetNoDelay bool
 	NagleOff   bool
 
+	// Off DNS cache (use hostname directly)
+	OFF_DNS_CACHE bool
+
 	useProxy      bool
 	hostConnected string
 	run           bool
@@ -54,7 +57,6 @@ type Client struct {
 	portProxy     string
 	userProxy     string
 	passProxy     string
-	// sockProxy     byte
 }
 
 func (c *Client) Status() bool {
@@ -79,6 +81,13 @@ func (c *Client) connectNet(host string, port string) error {
 	}
 
 	var err error
+	if !c.OFF_DNS_CACHE {
+		ip, err := HostToIp(host, c.Ipv6)
+		if err != nil {
+			return err
+		}
+		host = ip.String()
+	}
 
 	if port != "443" {
 		c.NetConnection, err = c.Dialer.Dial("tcp", host+":"+port)
@@ -125,31 +134,31 @@ func (c *Client) connectHTTP(address string) error {
 	return nil
 }
 
-func (c *Client) connectSOCKS5(host string, port string) error {
-	ips, err := net.LookupIP(host)
+func (c *Client) connectSOCKS4(ip net.IP, port string) error {
+	c.flusher.Write([]byte{0x04, 0x01}) // ver, meth
+	_ = binary.Write(c.flusher, binary.BigEndian, uint16(StringToInt(port)))
+	c.flusher.Write(ip)
+	c.flusher.WriteByte(0x00) // userid
+
+	if err := c.flusher.Flush(); err != nil {
+		c.Close()
+		return &RegnError{Message: "field proxy connection with '" + ip.String() + ":" + port + "' address (Flush)"}
+	}
+
+	raw, err := c.peeker.Peek(2)
 	if err != nil {
-		return err
+		c.Close()
+		return &RegnError{Message: "field proxy connection with '" + ip.String() + ":" + port + "' address (Peek)"}
+	} else if raw[1] != 0x5A {
+		c.Close()
+		return &RegnError{Message: "field proxy connection with '" + ip.String() + ":" + port + "' address (raw[1] != 0x5A) 1"}
 	}
+	c.peeker.Discard(c.peeker.Buffered())
 
-	var ip net.IP
-	if c.Ipv6 {
-		for _, ipv := range ips {
-			if v4 := ipv.To16(); v4 != nil {
-				ip = v4
-				break
-			}
-		}
-	}
+	return nil
+}
 
-	if ip == nil {
-		for _, ipv := range ips {
-			if v4 := ipv.To4(); v4 != nil {
-				ip = v4
-				break
-			}
-		}
-	}
-
+func (c *Client) connectSOCKS5(ip net.IP, port string) error {
 	// ver, meth = open, auth
 	if c.authorization != "" {
 		c.flusher.Write([]byte{0x05, 0x01, 0x02})
@@ -159,18 +168,16 @@ func (c *Client) connectSOCKS5(host string, port string) error {
 
 	if err := c.flusher.Flush(); err != nil {
 		c.Close()
-		return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (Flush)"}
+		return &RegnError{Message: "field proxy connection with '" + ip.String() + ":" + port + "' address (Flush)"}
 	}
 
 	raw, err := c.peeker.Peek(2)
 	if err != nil {
 		c.Close()
-		return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (Peek)"}
-	}
-
-	if raw[1] != 0x5A && raw[1] != 0x02 {
+		return &RegnError{Message: "field proxy connection with '" + ip.String() + ":" + port + "' address (Peek)"}
+	} else if raw[1] != 0x5A && raw[1] != 0x02 {
 		c.Close()
-		return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (raw[1] != 0x5A) 1"}
+		return &RegnError{Message: "field proxy connection with '" + ip.String() + ":" + port + "' address (raw[1] != 0x5A) 1"}
 	}
 	c.peeker.Discard(c.peeker.Buffered())
 
@@ -182,18 +189,16 @@ func (c *Client) connectSOCKS5(host string, port string) error {
 		c.flusher.Write([]byte(c.passProxy))
 		if err := c.flusher.Flush(); err != nil {
 			c.Close()
-			return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (Flush)"}
+			return &RegnError{Message: "field proxy connection with '" + ip.String() + ":" + port + "' address (Flush)"}
 		}
 
 		raw, err = c.peeker.Peek(2)
 		if err != nil {
 			c.Close()
-			return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (Peek)"}
-		}
-
-		if raw[1] != 0x00 {
+			return &RegnError{Message: "field proxy connection with '" + ip.String() + ":" + port + "' address (Peek)"}
+		} else if raw[1] != 0x00 {
 			c.Close()
-			return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (raw[1] != 0x5A) 2"}
+			return &RegnError{Message: "field proxy connection with '" + ip.String() + ":" + port + "' address (raw[1] != 0x5A) 2"}
 		}
 		c.peeker.Discard(c.peeker.Buffered())
 	}
@@ -211,18 +216,16 @@ func (c *Client) connectSOCKS5(host string, port string) error {
 
 	if err := c.flusher.Flush(); err != nil {
 		c.Close()
-		return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (Flush)"}
+		return &RegnError{Message: "field proxy connection with '" + ip.String() + ":" + port + "' address (Flush)"}
 	}
 
 	raw, err = c.peeker.Peek(2)
 	if err != nil {
 		c.Close()
-		return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (Peek)"}
-	}
-
-	if raw[1] != 0x00 {
+		return &RegnError{Message: "field proxy connection with '" + ip.String() + ":" + port + "' address (Peek)"}
+	} else if raw[1] != 0x00 {
 		c.Close()
-		return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (raw[1] != 0x5A) 3"}
+		return &RegnError{Message: "field proxy connection with '" + ip.String() + ":" + port + "' address (raw[1] != 0x5A) 3"}
 	}
 	c.peeker.Discard(c.peeker.Buffered())
 
@@ -244,7 +247,7 @@ func (c *Client) Proxy(Url string) {
 	if len(pparse.Scheme) > 6 {
 		pparse.Scheme = pparse.Scheme[:6]
 	}
-	if pparse.Scheme != "http" && pparse.Scheme != "https" && pparse.Scheme != "socks5" { // 'pparse.Scheme != "socks4"'
+	if pparse.Scheme != "http" && pparse.Scheme != "https" && pparse.Scheme != "socks4" && pparse.Scheme != "socks5" {
 		panic("proxy scheme '" + pparse.Scheme + "' not supported")
 	}
 
@@ -263,9 +266,9 @@ func (c *Client) Proxy(Url string) {
 
 	if c.userProxy != "" {
 		c.authorization = base64.StdEncoding.EncodeToString([]byte(c.userProxy + ":" + c.passProxy))
-		// if c.schemeProxy == "socks4" {
-		// 	panic("socks4 not support authorization")
-		// }
+		if c.schemeProxy == "socks4" {
+			panic("socks4 not support authorization")
+		}
 	} else {
 		c.authorization = ""
 	}
@@ -343,20 +346,30 @@ func (c *Client) Connect(REQ *RequestType) error {
 
 	if c.hostConnected == "" {
 		c.TLSConfig.ServerName = REQ.Header.myhost
-
 		if c.useProxy {
 			if err := c.connectNet(c.hostProxy, c.portProxy); err != nil {
 				c.Close()
 				return err
 			}
 
-			if c.schemeProxy == "http" || c.schemeProxy == "https" {
-				if err := c.connectHTTP(REQ.Header.myhost + ":" + REQ.Header.myport); err != nil {
+			ip, err := HostToIp(REQ.Header.myhost, c.Ipv6)
+			if err != nil {
+				return err
+			}
+
+			switch c.schemeProxy {
+			case "https", "http":
+				if err := c.connectHTTP(ip.String() + ":" + REQ.Header.myport); err != nil {
 					c.Close()
 					return err
 				}
-			} else if c.schemeProxy == "socks5" {
-				if err := c.connectSOCKS5(REQ.Header.myhost, REQ.Header.myport); err != nil {
+			case "socks4":
+				if err := c.connectSOCKS4(ip, REQ.Header.myport); err != nil {
+					c.Close()
+					return err
+				}
+			case "socks5":
+				if err := c.connectSOCKS5(ip, REQ.Header.myport); err != nil {
 					c.Close()
 					return err
 				}
@@ -387,6 +400,8 @@ func (c *Client) Connect(REQ *RequestType) error {
 
 // Not support goroutine-safe
 func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
+	RES.Header.position = 0
+	RES.Header.theBuffer = RES.Header.theBuffer[:RES.Header.position]
 
 	if err := c.Connect(REQ); err != nil {
 		return err
@@ -403,10 +418,6 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 		c.Close()
 		return err
 	}
-
-	RES.Header.position = 0
-	RES.Header.theBuffer = RES.Header.theBuffer[:0]
-	RES.Header.theBuffer = RES.Header.theBuffer[:RES.Header.bufferSize]
 
 	var chunkedB bool
 	var chunked int = -1
@@ -447,6 +458,7 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 		}
 
 		if RES.Header.position+bufferd < RES.Header.bufferSize {
+			RES.Header.theBuffer = RES.Header.theBuffer[RES.Header.position+bufferd:]
 			copy(RES.Header.theBuffer[RES.Header.position:], raw)
 			RES.Header.position += bufferd
 		} else {
