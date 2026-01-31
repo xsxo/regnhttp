@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"crypto/tls"
 	"encoding/base64"
+	"encoding/binary"
 	"net"
 	"net/url"
 	"time"
@@ -32,6 +33,10 @@ type Client struct {
 	// Net connection of Client
 	NetConnection net.Conn
 
+	// Ipv6 option need to hostname and proxy server supported Ipv6
+	// Its work with only sock5 proxy right now
+	Ipv6 bool
+
 	// Off Nangle
 	SetNoDelay bool
 	NagleOff   bool
@@ -44,8 +49,12 @@ type Client struct {
 	flusher *bufio.Writer
 
 	authorization string
+	schemeProxy   string
 	hostProxy     string
 	portProxy     string
+	userProxy     string
+	passProxy     string
+	// sockProxy     byte
 }
 
 func (c *Client) Status() bool {
@@ -91,10 +100,8 @@ func (c *Client) connectNet(host string, port string) error {
 	return nil
 }
 
-func (c *Client) connectHost(address string) error {
-	c.flusher.WriteString("CONNECT " + address + " HTTP/1.1\r\n")
-	c.flusher.WriteString("Host: " + address + "\r\n")
-
+func (c *Client) connectHTTP(address string) error {
+	c.flusher.WriteString("CONNECT " + address + " HTTP/1.1\r\nHost: " + address + "\r\n")
 	if c.authorization != "" {
 		c.flusher.WriteString("Proxy-Authorization: Basic " + c.authorization + "\r\n")
 	}
@@ -118,6 +125,110 @@ func (c *Client) connectHost(address string) error {
 	return nil
 }
 
+func (c *Client) connectSOCKS5(host string, port string) error {
+	ips, err := net.LookupIP(host)
+	if err != nil {
+		return err
+	}
+
+	var ip net.IP
+	if c.Ipv6 {
+		for _, ipv := range ips {
+			if v4 := ipv.To16(); v4 != nil {
+				ip = v4
+				break
+			}
+		}
+	}
+
+	if ip == nil {
+		for _, ipv := range ips {
+			if v4 := ipv.To4(); v4 != nil {
+				ip = v4
+				break
+			}
+		}
+	}
+
+	// ver, meth = open, auth
+	if c.authorization != "" {
+		c.flusher.Write([]byte{0x05, 0x01, 0x02})
+	} else {
+		c.flusher.Write([]byte{0x05, 0x01, 0x00})
+	}
+
+	if err := c.flusher.Flush(); err != nil {
+		c.Close()
+		return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (Flush)"}
+	}
+
+	raw, err := c.peeker.Peek(2)
+	if err != nil {
+		c.Close()
+		return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (Peek)"}
+	}
+
+	if raw[1] != 0x5A && raw[1] != 0x02 {
+		c.Close()
+		return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (raw[1] != 0x5A) 1"}
+	}
+	c.peeker.Discard(c.peeker.Buffered())
+
+	if c.authorization != "" {
+		c.flusher.WriteByte(0x01)
+		c.flusher.WriteByte(byte(len(c.userProxy)))
+		c.flusher.Write([]byte(c.userProxy))
+		c.flusher.WriteByte(byte(len(c.passProxy)))
+		c.flusher.Write([]byte(c.passProxy))
+		if err := c.flusher.Flush(); err != nil {
+			c.Close()
+			return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (Flush)"}
+		}
+
+		raw, err = c.peeker.Peek(2)
+		if err != nil {
+			c.Close()
+			return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (Peek)"}
+		}
+
+		if raw[1] != 0x00 {
+			c.Close()
+			return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (raw[1] != 0x5A) 2"}
+		}
+		c.peeker.Discard(c.peeker.Buffered())
+	}
+
+	// ver, meth = connect, rsv
+	c.flusher.Write([]byte{0x05, 0x01, 0x00})
+	if c.Ipv6 {
+		c.flusher.WriteByte(0x04) // IPv6
+	} else {
+		c.flusher.WriteByte(0x01) // IPv4
+	}
+
+	c.flusher.Write(ip)
+	_ = binary.Write(c.flusher, binary.BigEndian, uint16(StringToInt(port)))
+
+	if err := c.flusher.Flush(); err != nil {
+		c.Close()
+		return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (Flush)"}
+	}
+
+	raw, err = c.peeker.Peek(2)
+	if err != nil {
+		c.Close()
+		return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (Peek)"}
+	}
+
+	if raw[1] != 0x00 {
+		c.Close()
+		return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (raw[1] != 0x5A) 3"}
+	}
+	c.peeker.Discard(c.peeker.Buffered())
+
+	return nil
+}
+
 func (c *Client) Proxy(Url string) {
 	if c.hostConnected != "" {
 		panic("can not set proxy after connect with server")
@@ -126,24 +237,35 @@ func (c *Client) Proxy(Url string) {
 	c.hostConnected = ""
 	c.useProxy = true
 
-	Parse, err := url.Parse(Url)
+	pparse, err := url.Parse(Url)
 	if err != nil {
 		panic("invalid proxy format")
 	}
+	if len(pparse.Scheme) > 6 {
+		pparse.Scheme = pparse.Scheme[:6]
+	}
+	if pparse.Scheme != "http" && pparse.Scheme != "https" && pparse.Scheme != "socks5" { // 'pparse.Scheme != "socks4"'
+		panic("proxy scheme '" + pparse.Scheme + "' not supported")
+	}
 
-	if Parse.Hostname() == "" {
+	c.schemeProxy = pparse.Scheme
+
+	if pparse.Hostname() == "" {
 		panic("no hostname proxy url supplied")
-	} else if Parse.Port() == "" {
+	} else if pparse.Port() == "" {
 		panic("no port proxy url supplied")
 	}
 
-	c.hostProxy = Parse.Hostname()
-	c.portProxy = Parse.Port()
+	c.hostProxy = pparse.Hostname()
+	c.portProxy = pparse.Port()
+	c.userProxy = pparse.User.Username()
+	c.passProxy, _ = pparse.User.Password()
 
-	if Parse.User.Username() != "" {
-		password, _ := Parse.User.Password()
-		credentials := Parse.User.Username() + ":" + password
-		c.authorization = base64.StdEncoding.EncodeToString([]byte(credentials))
+	if c.userProxy != "" {
+		c.authorization = base64.StdEncoding.EncodeToString([]byte(c.userProxy + ":" + c.passProxy))
+		// if c.schemeProxy == "socks4" {
+		// 	panic("socks4 not support authorization")
+		// }
 	} else {
 		c.authorization = ""
 	}
@@ -228,12 +350,19 @@ func (c *Client) Connect(REQ *RequestType) error {
 				return err
 			}
 
-			if err := c.connectHost(REQ.Header.myhost + ":" + REQ.Header.myport); err != nil {
-				c.Close()
-				return err
+			if c.schemeProxy == "http" || c.schemeProxy == "https" {
+				if err := c.connectHTTP(REQ.Header.myhost + ":" + REQ.Header.myport); err != nil {
+					c.Close()
+					return err
+				}
+			} else if c.schemeProxy == "socks5" {
+				if err := c.connectSOCKS5(REQ.Header.myhost, REQ.Header.myport); err != nil {
+					c.Close()
+					return err
+				}
 			}
 
-			if REQ.Header.myport == "443" || REQ.Header.mytls {
+			if REQ.Header.myport == "443" || REQ.Header.mytls || c.schemeProxy == "https" {
 				c.NetConnection = tls.Client(c.NetConnection, c.TLSConfig)
 				c.createLines()
 			}
