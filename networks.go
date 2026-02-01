@@ -401,20 +401,22 @@ func (c *Client) Connect(REQ *RequestType) error {
 // Not support goroutine-safe
 func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 	RES.Header.position = 0
-	RES.Header.theBuffer = RES.Header.theBuffer[:RES.Header.position]
-
+	RES.Header.theBuffer = RES.Header.theBuffer[:RES.Header.bufferSize]
 	if err := c.Connect(REQ); err != nil {
+		RES.Reset()
+		c.Close()
 		return err
 	}
 
 	c.run = true
-	REQ.Header.raw = REQ.Header.raw[:REQ.Header.position]
-	if _, err := c.flusher.Write(REQ.Header.raw); err != nil {
+	if _, err := c.flusher.Write(REQ.Header.raw[:REQ.Header.position]); err != nil {
+		RES.Reset()
 		c.Close()
 		return err
 	}
 
 	if err := c.flusher.Flush(); err != nil {
+		RES.Reset()
 		c.Close()
 		return err
 	}
@@ -441,6 +443,7 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 			chunked -= bufferd
 		} else {
 			if _, err := c.peeker.Peek(1); err != nil {
+				RES.Reset()
 				c.Close()
 				return err
 			}
@@ -449,16 +452,19 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 
 		raw, err := c.peeker.Peek(bufferd)
 		if err != nil {
+			RES.Reset()
+			c.Close()
 			return err
 		}
 
 		_, err = c.peeker.Discard(bufferd)
 		if err != nil {
+			RES.Reset()
+			c.Close()
 			return err
 		}
 
 		if RES.Header.position+bufferd < RES.Header.bufferSize {
-			RES.Header.theBuffer = RES.Header.theBuffer[RES.Header.position+bufferd:]
 			copy(RES.Header.theBuffer[RES.Header.position:], raw)
 			RES.Header.position += bufferd
 		} else {
@@ -522,6 +528,7 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 		}
 	}
 
+	RES.Header.theBuffer = RES.Header.theBuffer[:RES.Header.position]
 	c.run = false
 	return nil
 }

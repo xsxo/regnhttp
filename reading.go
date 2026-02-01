@@ -21,10 +21,8 @@ func (RES *ResponseType) Close() {
 }
 
 func (RES *ResponseType) Reset() {
-	for xo := 0; xo != RES.Header.position; xo++ {
-		RES.Header.theBuffer[xo] = 0x00
-	}
 	RES.Header.position = 0
+	RES.Header.theBuffer = RES.Header.theBuffer[:0]
 }
 
 func Response(bufferSize int) *ResponseType {
@@ -65,16 +63,16 @@ func (RES *ResponseType) ReasonString() string {
 	return string(RES.Reason())
 }
 
-func (RES *ResponseType) BodyString() string {
-	return string(RES.Body())
-}
-
 func (RES *ResponseType) Body() []byte {
 	idx := bytes.Index(RES.Header.theBuffer, lines)
 	if idx == -1 {
 		return nil
 	}
 	return RES.Header.theBuffer[idx+4 : RES.Header.position]
+}
+
+func (RES *ResponseType) BodyString() string {
+	return string(RES.Body())
 }
 
 func (HEAD *headStruct) GetAll() map[string]string {

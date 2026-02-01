@@ -76,14 +76,18 @@ func TestReading(t *testing.T) {
 		t.Error("Response.StatusCodeString function 0")
 	}
 
-	c.Close()
 	r.SetMethod("GET")
-	r.SetURL("https://github.com/")
-	r.SetBody(nil)
-	if err := c.Do(r, s); err != nil {
-		t.Error("Do function 3")
-	} else if !strings.Contains(s.ReasonString(), "200 OK") {
-		t.Error("Reading Html Page")
+	r.SetURL("https://error_server.error/")
+	if err := c.Do(r, s); err == nil {
+		t.Error("Do function 4")
+	} else if s.RawString() != "" {
+		t.Error("Clean response 's.RawString()'")
+	} else if s.Body() != nil {
+		t.Error("Clean response 's.Body()'")
+	} else if s.StatusCodeInt() != 0 {
+		t.Error("Clean response 's.StatusCodeInt()'")
+	} else if s.Reason() != nil {
+		t.Error("Clean response 's.StatusCodeInt()'")
 	}
 
 	c.Close()
