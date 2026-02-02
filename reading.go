@@ -22,7 +22,10 @@ func (RES *ResponseType) Close() {
 
 func (RES *ResponseType) Reset() {
 	RES.Header.position = 0
-	RES.Header.theBuffer = RES.Header.theBuffer[:0]
+	RES.Header.theBuffer = RES.Header.theBuffer[:RES.Header.bufferSize]
+	for xo := 0; xo != RES.Header.bufferSize; xo++ {
+		RES.Header.theBuffer[0] = 0x00
+	}
 }
 
 func Response(bufferSize int) *ResponseType {
@@ -30,7 +33,7 @@ func Response(bufferSize int) *ResponseType {
 }
 
 func (RES *ResponseType) StatusCode() []byte {
-	index1 := bytes.IndexByte(RES.Header.theBuffer, ' ')
+	index1 := bytes.IndexByte(RES.Header.theBuffer[:RES.Header.position], ' ')
 	if index1 == -1 {
 		return nil
 	}
@@ -52,7 +55,7 @@ func (RES *ResponseType) StatusCodeInt() int {
 }
 
 func (RES *ResponseType) Reason() []byte {
-	index1 := bytes.IndexByte(RES.Header.theBuffer, ' ')
+	index1 := bytes.IndexByte(RES.Header.theBuffer[:RES.Header.position], ' ')
 	if index1 == -1 {
 		return nil
 	}
@@ -64,7 +67,7 @@ func (RES *ResponseType) ReasonString() string {
 }
 
 func (RES *ResponseType) Body() []byte {
-	idx := bytes.Index(RES.Header.theBuffer, lines)
+	idx := bytes.Index(RES.Header.theBuffer[:RES.Header.position], lines)
 	if idx == -1 {
 		return nil
 	}
@@ -78,7 +81,7 @@ func (RES *ResponseType) BodyString() string {
 func (HEAD *headStruct) GetAll() map[string]string {
 	forReturn := make(map[string]string)
 
-	forNothing := strings.Split(string(HEAD.theBuffer), "\r\n")[1:]
+	forNothing := strings.Split(string(HEAD.theBuffer[:HEAD.position]), "\r\n")[1:]
 
 	for _, res := range forNothing {
 		index1 := strings.Index(res, ": ")
@@ -94,7 +97,7 @@ func (HEAD *headStruct) GetAll() map[string]string {
 }
 
 func (HEAD *headStruct) Get(name string) string {
-	forNothing := strings.Split(string(HEAD.theBuffer), "\r\n")[1:]
+	forNothing := strings.Split(string(HEAD.theBuffer[:HEAD.position]), "\r\n")[1:]
 
 	for _, res := range forNothing {
 		index1 := strings.Index(res, ": ")
