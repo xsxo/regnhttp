@@ -27,8 +27,8 @@ func (REQ *RequestType) Close() {
 func (REQ *RequestType) Reset() {
 	REQ.Header.raw = REQ.Header.raw[:0]
 	REQ.Header.raw = REQ.Header.raw[:REQ.Header.bufferSize]
-	copy(REQ.Header.raw[REQ.Header.position:], []byte("GET /golang HTTP/1.1\r\n"+"User-Agent: "+Name+"/"+Version+Author+"\r\n"+"Connection: Keep-Alive\r\n\r\n"))
-	REQ.Header.position += 90
+	copy(REQ.Header.raw[REQ.Header.position:], []byte(defaultRequest))
+	REQ.Header.position += len(defaultRequest)
 }
 
 func Request(bufferSize int) *RequestType {
@@ -38,8 +38,8 @@ func Request(bufferSize int) *RequestType {
 
 	toReturn := &RequestType{Header: &ConnectionInformation{raw: make([]byte, 0, bufferSize), bufferSize: bufferSize}}
 	toReturn.Header.raw = toReturn.Header.raw[:bufferSize]
-	copy(toReturn.Header.raw[toReturn.Header.position:], []byte("GET /golang HTTP/1.1\r\n"+"User-Agent: "+Name+"/"+Version+Author+"\r\n"+"Connection: Keep-Alive\r\n\r\n"))
-	toReturn.Header.position += 90
+	copy(toReturn.Header.raw[toReturn.Header.position:], []byte(defaultRequest))
+	toReturn.Header.position += len(defaultRequest)
 	return toReturn
 }
 

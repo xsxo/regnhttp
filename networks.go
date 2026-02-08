@@ -33,16 +33,15 @@ type Client struct {
 	// Net connection of Client
 	NetConnection net.Conn
 
-	// Ipv6 option need to hostname and proxy server supported Ipv6
-	// Its work with only sock5 proxy right now
+	// Ipv6 option need to hostname server supported Ipv6
 	Ipv6 bool
+
+	// Ipv6 option need to proxy server supported Ipv6
+	Ipv6SOCKS5 bool
 
 	// Off Nangle
 	SetNoDelay bool
 	NagleOff   bool
-
-	// Off DNS cache (use hostname directly)
-	OFF_DNS_CACHE bool
 
 	useProxy      bool
 	hostConnected string
@@ -81,18 +80,18 @@ func (c *Client) connectNet(host string, port string) error {
 	}
 
 	var err error
-	if !c.OFF_DNS_CACHE {
-		ip, err := HostToIp(host, c.Ipv6)
-		if err != nil {
-			return err
-		}
-		host = ip.String()
-	}
-
 	if port != "443" {
-		c.NetConnection, err = c.Dialer.Dial("tcp", host+":"+port)
+		if c.Ipv6 {
+			c.NetConnection, err = c.Dialer.Dial("tcp6", host+":"+port)
+		} else {
+			c.NetConnection, err = c.Dialer.Dial("tcp4", host+":"+port)
+		}
 	} else {
-		c.NetConnection, err = tls.DialWithDialer(c.Dialer, "tcp4", host+":"+port, c.TLSConfig)
+		if c.Ipv6 {
+			c.NetConnection, err = tls.DialWithDialer(c.Dialer, "tcp6", host+":"+port, c.TLSConfig)
+		} else {
+			c.NetConnection, err = tls.DialWithDialer(c.Dialer, "tcp4", host+":"+port, c.TLSConfig)
+		}
 	}
 
 	if err != nil {
@@ -134,31 +133,41 @@ func (c *Client) connectHTTP(address string) error {
 	return nil
 }
 
-func (c *Client) connectSOCKS4(ip net.IP, port string) error {
+func (c *Client) connectSOCKS4(host string, port string) error {
 	c.flusher.Write([]byte{0x04, 0x01}) // ver, meth
-	_ = binary.Write(c.flusher, binary.BigEndian, uint16(StringToInt(port)))
-	c.flusher.Write(ip)
+	binary.Write(c.flusher, binary.BigEndian, uint16(StringToInt(port)))
+
+	ips, err := net.LookupIP(host)
+	if err != nil {
+		return err
+	}
+	for _, ip := range ips {
+		if ip.To4() != nil {
+			c.flusher.Write(ip)
+		}
+	}
+
 	c.flusher.WriteByte(0x00) // userid
 
 	if err := c.flusher.Flush(); err != nil {
 		c.Close()
-		return &RegnError{Message: "field proxy connection with '" + ip.String() + ":" + port + "' address (Flush)"}
+		return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (Flush)"}
 	}
 
 	raw, err := c.peeker.Peek(2)
 	if err != nil {
 		c.Close()
-		return &RegnError{Message: "field proxy connection with '" + ip.String() + ":" + port + "' address (Peek)"}
+		return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (Peek)"}
 	} else if raw[1] != 0x5A {
 		c.Close()
-		return &RegnError{Message: "field proxy connection with '" + ip.String() + ":" + port + "' address (raw[1] != 0x5A) 1"}
+		return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (raw[1] != 0x5A) 1"}
 	}
 	c.peeker.Discard(c.peeker.Buffered())
 
 	return nil
 }
 
-func (c *Client) connectSOCKS5(ip net.IP, port string) error {
+func (c *Client) connectSOCKS5(host string, port string) error {
 	// ver, meth = open, auth
 	if c.authorization != "" {
 		c.flusher.Write([]byte{0x05, 0x01, 0x02})
@@ -168,16 +177,16 @@ func (c *Client) connectSOCKS5(ip net.IP, port string) error {
 
 	if err := c.flusher.Flush(); err != nil {
 		c.Close()
-		return &RegnError{Message: "field proxy connection with '" + ip.String() + ":" + port + "' address (Flush)"}
+		return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (Flush)"}
 	}
 
 	raw, err := c.peeker.Peek(2)
 	if err != nil {
 		c.Close()
-		return &RegnError{Message: "field proxy connection with '" + ip.String() + ":" + port + "' address (Peek)"}
+		return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (Peek)"}
 	} else if raw[1] != 0x5A && raw[1] != 0x02 {
 		c.Close()
-		return &RegnError{Message: "field proxy connection with '" + ip.String() + ":" + port + "' address (raw[1] != 0x5A) 1"}
+		return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (raw[1] != 0x5A) 1"}
 	}
 	c.peeker.Discard(c.peeker.Buffered())
 
@@ -189,43 +198,58 @@ func (c *Client) connectSOCKS5(ip net.IP, port string) error {
 		c.flusher.Write([]byte(c.passProxy))
 		if err := c.flusher.Flush(); err != nil {
 			c.Close()
-			return &RegnError{Message: "field proxy connection with '" + ip.String() + ":" + port + "' address (Flush)"}
+			return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (Flush)"}
 		}
 
 		raw, err = c.peeker.Peek(2)
 		if err != nil {
 			c.Close()
-			return &RegnError{Message: "field proxy connection with '" + ip.String() + ":" + port + "' address (Peek)"}
+			return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (Peek)"}
 		} else if raw[1] != 0x00 {
 			c.Close()
-			return &RegnError{Message: "field proxy connection with '" + ip.String() + ":" + port + "' address (raw[1] != 0x5A) 2"}
+			return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (raw[1] != 0x5A) 2"}
 		}
 		c.peeker.Discard(c.peeker.Buffered())
 	}
 
 	// ver, meth = connect, rsv
 	c.flusher.Write([]byte{0x05, 0x01, 0x00})
-	if c.Ipv6 {
-		c.flusher.WriteByte(0x04) // IPv6
-	} else {
-		c.flusher.WriteByte(0x01) // IPv4
+
+	var connected bool
+	if c.Ipv6SOCKS5 {
+		ips, err := net.LookupIP(host)
+		if err != nil {
+			return err
+		}
+		for _, ip := range ips {
+			if ip.To16() != nil {
+				connected = true
+				c.flusher.WriteByte(0x04) // IPv6
+				c.flusher.Write(ip)
+				binary.Write(c.flusher, binary.BigEndian, uint16(StringToInt(port)))
+			}
+		}
 	}
 
-	c.flusher.Write(ip)
-	_ = binary.Write(c.flusher, binary.BigEndian, uint16(StringToInt(port)))
+	if !connected {
+		c.flusher.WriteByte(0x03) // Domain
+		c.flusher.WriteByte(byte(len(host)))
+		c.flusher.WriteString(host)
+		binary.Write(c.flusher, binary.BigEndian, uint16(StringToInt(port)))
+	}
 
 	if err := c.flusher.Flush(); err != nil {
 		c.Close()
-		return &RegnError{Message: "field proxy connection with '" + ip.String() + ":" + port + "' address (Flush)"}
+		return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (Flush)"}
 	}
 
 	raw, err = c.peeker.Peek(2)
 	if err != nil {
 		c.Close()
-		return &RegnError{Message: "field proxy connection with '" + ip.String() + ":" + port + "' address (Peek)"}
+		return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (Peek)"}
 	} else if raw[1] != 0x00 {
 		c.Close()
-		return &RegnError{Message: "field proxy connection with '" + ip.String() + ":" + port + "' address (raw[1] != 0x5A) 3"}
+		return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (raw[1] != 0x5A) 3"}
 	}
 	c.peeker.Discard(c.peeker.Buffered())
 
@@ -352,24 +376,19 @@ func (c *Client) Connect(REQ *RequestType) error {
 				return err
 			}
 
-			ip, err := HostToIp(REQ.Header.myhost, c.Ipv6)
-			if err != nil {
-				return err
-			}
-
 			switch c.schemeProxy {
 			case "https", "http":
-				if err := c.connectHTTP(ip.String() + ":" + REQ.Header.myport); err != nil {
+				if err := c.connectHTTP(REQ.Header.myhost + ":" + REQ.Header.myport); err != nil {
 					c.Close()
 					return err
 				}
 			case "socks4":
-				if err := c.connectSOCKS4(ip, REQ.Header.myport); err != nil {
+				if err := c.connectSOCKS4(REQ.Header.myhost, REQ.Header.myport); err != nil {
 					c.Close()
 					return err
 				}
 			case "socks5":
-				if err := c.connectSOCKS5(ip, REQ.Header.myport); err != nil {
+				if err := c.connectSOCKS5(REQ.Header.myhost, REQ.Header.myport); err != nil {
 					c.Close()
 					return err
 				}
@@ -426,20 +445,13 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 	var indexRNRN int = -1
 	var bufferd int
 	var contentLength int = -1
+
 	for contentLength != 0 {
 		if contentLength > 0 {
-			if c.ReadBufferSize > contentLength {
-				bufferd = contentLength
-			} else {
-				bufferd = c.ReadBufferSize
-			}
+			bufferd = min(c.ReadBufferSize, contentLength)
 			contentLength -= bufferd
 		} else if chunked > 0 {
-			if c.ReadBufferSize > chunked {
-				bufferd = chunked
-			} else {
-				bufferd = c.ReadBufferSize
-			}
+			bufferd = min(c.ReadBufferSize, chunked+7)
 			chunked -= bufferd
 		} else {
 			if _, err := c.peeker.Peek(1); err != nil {
@@ -486,7 +498,6 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 
 				start := indexRNRN
 				end := indexRNRN + rn
-
 				hex, b := hexBytesToInt(RES.Header.theBuffer[start:end])
 				if !b || hex == 0 {
 					contentLength = 0

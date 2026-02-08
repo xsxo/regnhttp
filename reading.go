@@ -24,7 +24,7 @@ func (RES *ResponseType) Reset() {
 	RES.Header.position = 0
 	RES.Header.theBuffer = RES.Header.theBuffer[:RES.Header.bufferSize]
 	for xo := 0; xo != RES.Header.bufferSize; xo++ {
-		RES.Header.theBuffer[0] = 0x00
+		RES.Header.theBuffer[xo] = 0x00
 	}
 }
 

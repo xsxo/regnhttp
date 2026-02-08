@@ -11,8 +11,9 @@ type RegnError struct {
 }
 
 var (
-	peekerPool  *sync.Pool = &sync.Pool{}
-	flusherPool *sync.Pool = &sync.Pool{}
+	defaultRequest string     = "GET /golang HTTP/1.1\r\n" + "User-Agent: " + Name + "/" + Version + Author + "\r\n" + "Connection: Keep-Alive\r\n\r\n"
+	peekerPool     *sync.Pool = &sync.Pool{}
+	flusherPool    *sync.Pool = &sync.Pool{}
 
 	contentLengthKey []byte = []byte("Content-Length: ")
 	chunkedValue            = []byte(": chunked")
