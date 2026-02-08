@@ -1,16 +1,18 @@
-package regn
+package regn_test
 
 import (
 	"bytes"
 	"strings"
 	"testing"
+
+	regn "github.com/xsxo/regnhttp"
 )
 
-var req *RequestType
+var req *regn.RequestType
 
 func prepare_request() {
-	req = Request(4 * 1024)
-	req.SetMethod(MethodPost)
+	req = regn.Request(4 * 1024)
+	req.SetMethod(regn.MethodPost)
 	req.SetURL("https://localhost:8080/api")
 	req.Header.Set("Message1", "REGN HTTP v0.0.0-rc @xsxo - GitHub.com")
 	req.Header.Set("Message2", "REGN HTTP v0.0.0-rc @xsxo - GitHub.com")
@@ -24,27 +26,27 @@ func clear_request() {
 }
 
 func testMethod(t *testing.T) {
-	req = Request(4 * 1024)
+	req = regn.Request(4 * 1024)
 
-	req.SetMethod(MethodPut)
-	if raw := req.RawString(); raw[:len(MethodPut)] != MethodPut || raw[len(MethodPut)] != ' ' {
+	req.SetMethod(regn.MethodPut)
+	if raw := req.RawString(); raw[:len(regn.MethodPut)] != regn.MethodPut || raw[len(regn.MethodPut)] != ' ' {
 		t.Error("error when prepare RequestType.SetMethod function `set`\n" + strings.ReplaceAll(req.RawString(), "\r\n", "\\r\\n"))
 	}
 
-	req.SetMethod(MethodConnect)
-	if raw := req.RawString(); raw[:len(MethodConnect)] != MethodConnect || raw[len(MethodConnect)] != ' ' {
+	req.SetMethod(regn.MethodConnect)
+	if raw := req.RawString(); raw[:len(regn.MethodConnect)] != regn.MethodConnect || raw[len(regn.MethodConnect)] != ' ' {
 		t.Error("error when prepare RequestType.SetMethod function `from lower to upper`\n" + strings.ReplaceAll(req.RawString(), "\r\n", "\\r\\n"))
 	}
 
-	req.SetMethod(MethodPost)
-	if raw := req.RawString(); raw[:len(MethodPost)] != MethodPost || raw[len(MethodPost)] != ' ' {
+	req.SetMethod(regn.MethodPost)
+	if raw := req.RawString(); raw[:len(regn.MethodPost)] != regn.MethodPost || raw[len(regn.MethodPost)] != ' ' {
 		t.Error("error when prepare RequestType.SetMethod function `from upper to lower`\n" + strings.ReplaceAll(req.RawString(), "\r\n", "\\r\\n"))
 	}
 
 }
 
 func testURL(t *testing.T) {
-	req = Request(4 * 1024)
+	req = regn.Request(4 * 1024)
 
 	req.SetURL("https://localhost:8080/api")
 	if !strings.Contains(req.RawString(), " /api ") {
@@ -58,7 +60,7 @@ func testURL(t *testing.T) {
 }
 
 func testHeader(t *testing.T) {
-	req = Request(4 * 1024)
+	req = regn.Request(4 * 1024)
 
 	req.Header.Set("lanugage", "english")
 	if !strings.Contains(req.RawString(), "lanugage: english\r\n") {
@@ -77,7 +79,7 @@ func testHeader(t *testing.T) {
 }
 
 func testBody(t *testing.T) {
-	req = Request(4 * 1024)
+	req = regn.Request(4 * 1024)
 
 	req.SetBodyString("hello")
 	if !strings.Contains(req.RawString(), "\r\n\r\nhello") {
@@ -97,15 +99,15 @@ func testBody(t *testing.T) {
 
 func Test_SetHeaders(t *testing.T) {
 	prepare_request()
-	if !bytes.Contains(req.Header.raw, []byte(" /api ")) {
+	if !bytes.Contains(req.Raw(), []byte(" /api ")) {
 		t.Error("error when prepare RequestType.SetURL function")
-	} else if !bytes.Contains(req.Header.raw, []byte("Message1: ")) {
+	} else if !bytes.Contains(req.Raw(), []byte("Message1: ")) {
 		t.Error("error when prepare RequestType.Header.Set function")
-	} else if !bytes.Contains(req.Header.raw, []byte("Message2: ")) {
+	} else if !bytes.Contains(req.Raw(), []byte("Message2: ")) {
 		t.Error("error when prepare RequestType.Header.Add function")
-	} else if !bytes.Contains(req.Header.raw, []byte("\r\n\r\nREGN HTTP TEST BODY")) {
+	} else if !bytes.Contains(req.Raw(), []byte("\r\n\r\nREGN HTTP TEST BODY")) {
 		t.Error("error when prepare RequestType.SetBody function")
-	} else if !bytes.Contains(req.Header.raw, []byte("Content-Length: ")) {
+	} else if !bytes.Contains(req.Raw(), []byte("Content-Length: ")) {
 		t.Error("error when prepare RequestType.SetBody function")
 	}
 

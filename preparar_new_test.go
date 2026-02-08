@@ -1,14 +1,16 @@
-package regn
+package regn_test
 
 import (
 	"strings"
 	"testing"
+
+	regn "github.com/xsxo/regnhttp"
 )
 
-var r *RequestType = Request(32 * 6 * 1024)
+var r *regn.RequestType = regn.Request(32 * 6 * 1024)
 
 func prepare_request_new() {
-	r.SetMethod(MethodPost)
+	r.SetMethod(regn.MethodPost)
 	r.SetURL("https://localhost:8080/api")
 	r.Header.Set("Key1", "REGN HTTP v0.0.0-rc @xsxo - GitHub.com")
 	r.Header.Set("Other1", "REGN HTTP v0.0.0-rc @xsxo - GitHub.com")
@@ -18,7 +20,7 @@ func prepare_request_new() {
 func Test_prepareNew(t *testing.T) {
 	prepare_request_new()
 
-	methods := []string{MethodConnect, MethodDelete, MethodGet, MethodHead, MethodOptions, MethodPatch}
+	methods := []string{regn.MethodConnect, regn.MethodDelete, regn.MethodGet, regn.MethodHead, regn.MethodOptions, regn.MethodPatch}
 
 	for xo := 0; xo != len(methods); xo++ {
 		method := methods[xo]

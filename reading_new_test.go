@@ -1,14 +1,16 @@
-package regn
+package regn_test
 
 import (
 	"strings"
 	"testing"
+
+	regn "github.com/xsxo/regnhttp"
 )
 
 func TestReadingNew(t *testing.T) {
-	c := Client{}
-	r := Request(4 * 1024)
-	s := Response(4096 * 1024)
+	c := regn.Client{}
+	r := regn.Request(4 * 1024)
+	s := regn.Response(4096 * 1024)
 
 	r.SetMethod("GET")
 	r.SetURL("https://github.com/")
