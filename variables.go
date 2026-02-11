@@ -2,7 +2,6 @@ package regn
 
 import (
 	"bufio"
-	"io"
 	"sync"
 )
 
@@ -38,28 +37,22 @@ func (e *RegnError) Error() string {
 	return "regnhttp error: " + e.Message
 }
 
-func genPeeker(reader io.Reader, size int) *bufio.Reader {
+func genPeeker(size int) *bufio.Reader {
 	nr := peekerPool.Get()
-
 	if nr == nil {
-		return bufio.NewReaderSize(reader, size)
+		return bufio.NewReaderSize(nil, size)
 	}
 
-	nrr, _ := nr.(*bufio.Reader)
-	nrr.Reset(reader)
-	return nrr
+	return nr.(*bufio.Reader)
 }
 
-func genFlusher(writer io.Writer, size int) *bufio.Writer {
+func genFlusher(size int) *bufio.Writer {
 	nw := flusherPool.Get()
-
 	if nw == nil {
-		return bufio.NewWriterSize(writer, size)
+		return bufio.NewWriterSize(nil, size)
 	}
 
-	nww, _ := nw.(*bufio.Writer)
-	nww.Reset(writer)
-	return nww
+	return nw.(*bufio.Writer)
 }
 
 func BytesToInt(b []byte) int {

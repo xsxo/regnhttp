@@ -6,9 +6,11 @@ import (
 )
 
 type ConnectionInformation struct {
+	myipv4 bool
+	myipv6 bool
+	mytls  bool
 	myport string
 	myhost string
-	mytls  bool
 
 	raw        []byte
 	bufferSize int
@@ -25,6 +27,12 @@ func (REQ *RequestType) Close() {
 }
 
 func (REQ *RequestType) Reset() {
+	REQ.Header.myipv4 = false
+	REQ.Header.myipv6 = false
+	REQ.Header.mytls = false
+	REQ.Header.myhost = ""
+	REQ.Header.myport = ""
+
 	REQ.Header.raw = REQ.Header.raw[:0]
 	REQ.Header.raw = REQ.Header.raw[:REQ.Header.bufferSize]
 	copy(REQ.Header.raw[REQ.Header.position:], []byte(defaultRequest))
@@ -57,6 +65,12 @@ func (REQ *RequestType) SetMethod(METHOD string) {
 }
 
 func (REQ *RequestType) SetURL(Url string) {
+	REQ.Header.myipv4 = false
+	REQ.Header.myipv6 = false
+	REQ.Header.mytls = false
+	REQ.Header.myhost = ""
+	REQ.Header.myport = ""
+
 	Parse, err := url.Parse(Url)
 
 	if err != nil {

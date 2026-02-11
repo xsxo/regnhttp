@@ -12,16 +12,16 @@ import (
 )
 
 type Client struct {
-	// Timeout Connection
+	// Timeout Connection (this option make the connection dosen't wait forever)
 	Timeout time.Duration
 
-	// Timeout Reading Response
+	// Timeout Reading Responses (this option make the read function dosen't wait forever)
 	TimeoutRead time.Duration
 
-	// Tls Context
+	// Tls Context // SSL Context
 	TLSConfig *tls.Config
 
-	// Dialer to create dial connection
+	// Raw connection of the client
 	Dialer *net.Dialer
 
 	// Buffer Size of Writer Requsts (default value is 4096)
@@ -33,17 +33,18 @@ type Client struct {
 	// Net connection of Client
 	NetConnection net.Conn
 
-	// Ipv6 option need to hostname server supported Ipv6
+	// Ipv6 option need to hostname Ipv6
+	// Support Ipv6 proxies (socks4 dose not support)
+	// Support DNS cache (if use t his option the hostname will converted to Ipv6 and will saved in cache)
 	Ipv6 bool
 
-	// Ipv6 option need to proxy server supported Ipv6
-	Ipv6SOCKS5 bool
-
-	// Off Nangle
+	// Off Nagle algorithm
+	// Nagle algorithm: https://en.wikipedia.org/wiki/Nagle%27s_algorithm
 	SetNoDelay bool
 	NagleOff   bool
 
-	useProxy      bool
+	boolPreRequst bool
+	boolProxy     bool
 	hostConnected string
 	run           bool
 
@@ -58,12 +59,18 @@ type Client struct {
 	passProxy     string
 }
 
+// check status connection
 func (c *Client) Status() bool {
 	if c.hostConnected != "" {
 		return true
 	} else {
 		return false
 	}
+}
+
+// host & ip of connection
+func (c *Client) Host() string {
+	return c.hostConnected
 }
 
 func (c *Client) connectNet(host string, port string) error {
@@ -81,13 +88,13 @@ func (c *Client) connectNet(host string, port string) error {
 
 	var err error
 	if port != "443" {
-		if c.Ipv6 {
+		if c.Ipv6 && !c.boolProxy {
 			c.NetConnection, err = c.Dialer.Dial("tcp6", host+":"+port)
 		} else {
 			c.NetConnection, err = c.Dialer.Dial("tcp4", host+":"+port)
 		}
 	} else {
-		if c.Ipv6 {
+		if c.Ipv6 && !c.boolProxy {
 			c.NetConnection, err = tls.DialWithDialer(c.Dialer, "tcp6", host+":"+port, c.TLSConfig)
 		} else {
 			c.NetConnection, err = tls.DialWithDialer(c.Dialer, "tcp4", host+":"+port, c.TLSConfig)
@@ -108,24 +115,24 @@ func (c *Client) connectNet(host string, port string) error {
 	return nil
 }
 
-func (c *Client) connectHTTP(address string) error {
-	c.flusher.WriteString("CONNECT " + address + " HTTP/1.1\r\nHost: " + address + "\r\n")
+func (c *Client) connectHTTP(host string, port string) error {
+	c.flusher.WriteString("CONNECT " + host + ":" + port + " HTTP/1.1\r\nHost: " + host + ":" + port + "\r\n")
 	if c.authorization != "" {
 		c.flusher.WriteString("Proxy-Authorization: Basic " + c.authorization + "\r\n")
 	}
-	c.flusher.WriteString("\r\n")
+	c.flusher.Write(line)
 
 	if err := c.flusher.Flush(); err != nil {
 		c.Close()
-		return &RegnError{Message: "field proxy connection with '" + address + "' address (Flush)"}
+		return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (Flush)"}
 	}
 
 	if raw, err := c.peeker.Peek(16); err != nil {
-		return &RegnError{Message: "field proxy connection with '" + address + "' address (Peek)"}
+		return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (Peek)"}
 	} else {
 		if !bytes.Contains(raw, []byte{50, 48, 48}) {
 			c.Close()
-			return &RegnError{Message: "field proxy connection with '" + address + "' address (Contains)"}
+			return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (Contains)"}
 		}
 		c.peeker.Discard(c.peeker.Buffered())
 	}
@@ -134,18 +141,12 @@ func (c *Client) connectHTTP(address string) error {
 }
 
 func (c *Client) connectSOCKS4(host string, port string) error {
+	if c.Ipv6 {
+		panic("socks4 proxy dose not support Ipv6")
+	}
+
 	c.flusher.Write([]byte{0x04, 0x01}) // ver, meth
 	binary.Write(c.flusher, binary.BigEndian, uint16(StringToInt(port)))
-
-	ips, err := net.LookupIP(host)
-	if err != nil {
-		return err
-	}
-	for _, ip := range ips {
-		if ip.To4() != nil {
-			c.flusher.Write(ip)
-		}
-	}
 
 	c.flusher.WriteByte(0x00) // userid
 
@@ -215,28 +216,17 @@ func (c *Client) connectSOCKS5(host string, port string) error {
 	// ver, meth = connect, rsv
 	c.flusher.Write([]byte{0x05, 0x01, 0x00})
 
-	var connected bool
-	if c.Ipv6SOCKS5 {
-		ips, err := net.LookupIP(host)
-		if err != nil {
-			return err
-		}
-		for _, ip := range ips {
-			if ip.To16() != nil {
-				connected = true
-				c.flusher.WriteByte(0x04) // IPv6
-				c.flusher.Write(ip)
-				binary.Write(c.flusher, binary.BigEndian, uint16(StringToInt(port)))
-			}
-		}
-	}
-
-	if !connected {
-		c.flusher.WriteByte(0x03) // Domain
-		c.flusher.WriteByte(byte(len(host)))
+	if c.Ipv6 {
+		c.flusher.WriteByte(0x04) // IPv6
 		c.flusher.WriteString(host)
 		binary.Write(c.flusher, binary.BigEndian, uint16(StringToInt(port)))
+	} else {
+		c.flusher.WriteByte(0x03) // Domain
+		c.flusher.WriteByte(byte(len(host)))
 	}
+
+	c.flusher.WriteString(host)
+	binary.Write(c.flusher, binary.BigEndian, uint16(StringToInt(port)))
 
 	if err := c.flusher.Flush(); err != nil {
 		c.Close()
@@ -261,8 +251,11 @@ func (c *Client) Proxy(Url string) {
 		panic("can not set proxy after connect with server")
 	}
 
+	c.userProxy = ""
+	c.passProxy = ""
+	c.authorization = ""
 	c.hostConnected = ""
-	c.useProxy = true
+	c.boolProxy = true
 
 	pparse, err := url.Parse(Url)
 	if err != nil {
@@ -305,15 +298,14 @@ func (c *Client) Close() {
 			c.NetConnection.Close()
 			c.NetConnection = nil
 		}
-	} else {
-		if c.NetConnection != nil {
-			c.NetConnection.Close()
-			c.NetConnection = nil
-		}
+	} else if c.NetConnection != nil {
+		c.NetConnection.Close()
+		c.NetConnection = nil
 	}
 
 	c.closeLines()
 	c.hostConnected = ""
+	c.boolPreRequst = false
 	c.run = false
 }
 
@@ -340,16 +332,15 @@ func (c *Client) createLines() {
 		c.WriteBufferSize = 4096
 	}
 
+	c.peeker = genPeeker(c.ReadBufferSize)
+	c.flusher = genFlusher(c.WriteBufferSize)
+
 	if new, ok := c.NetConnection.(*tls.Conn); ok {
-		if new != nil {
-			c.peeker = genPeeker(new, c.ReadBufferSize)
-			c.flusher = genFlusher(new, c.WriteBufferSize)
-		}
-	} else {
-		if c.NetConnection != nil {
-			c.peeker = genPeeker(c.NetConnection, c.ReadBufferSize)
-			c.flusher = genFlusher(c.NetConnection, c.WriteBufferSize)
-		}
+		c.flusher.Reset(new)
+		c.peeker.Reset(new)
+	} else if c.NetConnection != nil {
+		c.flusher.Reset(c.NetConnection)
+		c.peeker.Reset(c.NetConnection)
 	}
 }
 
@@ -368,9 +359,23 @@ func (c *Client) Connect(REQ *RequestType) error {
 		panic("concurrent client goroutines")
 	}
 
+	if c.Ipv6 && !REQ.Header.myipv6 {
+		REQ.Header.myipv6 = true
+		ips, err := net.LookupIP(REQ.Header.myhost)
+		if err != nil {
+			return err
+		}
+		for _, ip := range ips {
+			if ip.To16() != nil {
+				REQ.Header.myhost = ip.String()
+				break
+			}
+		}
+	}
+
 	if c.hostConnected == "" {
 		c.TLSConfig.ServerName = REQ.Header.myhost
-		if c.useProxy {
+		if c.boolProxy {
 			if err := c.connectNet(c.hostProxy, c.portProxy); err != nil {
 				c.Close()
 				return err
@@ -378,11 +383,24 @@ func (c *Client) Connect(REQ *RequestType) error {
 
 			switch c.schemeProxy {
 			case "https", "http":
-				if err := c.connectHTTP(REQ.Header.myhost + ":" + REQ.Header.myport); err != nil {
+				if err := c.connectHTTP(REQ.Header.myhost, REQ.Header.myport); err != nil {
 					c.Close()
 					return err
 				}
 			case "socks4":
+				if !REQ.Header.myipv4 {
+					REQ.Header.myipv4 = true
+					ips, err := net.LookupIP(REQ.Header.myhost)
+					if err != nil {
+						return err
+					}
+					for _, ip := range ips {
+						if ip.To4() != nil {
+							REQ.Header.myhost = ip.String()
+							break
+						}
+					}
+				}
 				if err := c.connectSOCKS4(REQ.Header.myhost, REQ.Header.myport); err != nil {
 					c.Close()
 					return err
@@ -417,6 +435,33 @@ func (c *Client) Connect(REQ *RequestType) error {
 	return nil
 }
 
+func (c *Client) DoPreRequest(REQ *RequestType) error {
+	if err := c.Connect(REQ); err != nil {
+		c.Close()
+		return err
+	}
+
+	c.run = true
+	c.boolPreRequst = true
+	if _, err := c.flusher.Write(REQ.Header.raw[:REQ.Header.position-1]); err != nil {
+		c.Close()
+		return err
+	}
+
+	if err := c.flusher.Flush(); err != nil {
+		c.Close()
+		return err
+	}
+
+	if _, err := c.flusher.Write(REQ.Header.raw[REQ.Header.position-1 : REQ.Header.position]); err != nil {
+		c.Close()
+		return err
+	}
+
+	c.run = false
+	return nil
+}
+
 // Not support goroutine-safe
 func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 	RES.Header.position = 0
@@ -428,12 +473,15 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 	}
 
 	c.run = true
-	if _, err := c.flusher.Write(REQ.Header.raw[:REQ.Header.position]); err != nil {
-		RES.Reset()
-		c.Close()
-		return err
+	if !c.boolPreRequst {
+		if _, err := c.flusher.Write(REQ.Header.raw[:REQ.Header.position]); err != nil {
+			RES.Reset()
+			c.Close()
+			return err
+		}
 	}
 
+	c.boolPreRequst = false
 	if err := c.flusher.Flush(); err != nil {
 		RES.Reset()
 		c.Close()
@@ -445,7 +493,6 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 	var indexRNRN int = -1
 	var bufferd int
 	var contentLength int = -1
-
 	for contentLength != 0 {
 		if contentLength > 0 {
 			bufferd = min(c.ReadBufferSize, contentLength)
@@ -497,8 +544,7 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 				}
 
 				start := indexRNRN
-				end := indexRNRN + rn
-				hex, b := hexBytesToInt(RES.Header.theBuffer[start:end])
+				hex, b := hexBytesToInt(RES.Header.theBuffer[start : indexRNRN+rn])
 				if !b || hex == 0 {
 					contentLength = 0
 					break
@@ -507,13 +553,13 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 					break
 				}
 
-				if len(RES.Header.theBuffer[end+2:RES.Header.position]) > hex {
+				if len(RES.Header.theBuffer[indexRNRN+rn+2:RES.Header.position]) > hex {
 					chunked = 0
 				} else {
-					chunked = hex - len(RES.Header.theBuffer[end+2:RES.Header.position])
+					chunked = hex - len(RES.Header.theBuffer[indexRNRN+rn+2:RES.Header.position])
 				}
 
-				indexRNRN += hex + 4 + len(RES.Header.theBuffer[start:end])
+				indexRNRN += hex + 4 + len(RES.Header.theBuffer[start:indexRNRN+rn])
 				break
 			}
 			continue
@@ -530,6 +576,22 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 				if bytes.Contains(RES.Header.theBuffer[:indexRNRN], chunkedValue) {
 					chunkedB = true
 					indexRNRN += 4
+					if RES.Header.position > indexRNRN {
+						rn := bytes.Index(RES.Header.theBuffer[indexRNRN:RES.Header.position], line) + indexRNRN
+						if rn == indexRNRN-1 {
+							continue
+						}
+						hex, b := hexBytesToInt(RES.Header.theBuffer[indexRNRN:rn])
+						if !b || hex == 0 {
+							continue
+						} else if hex == 0 {
+							continue
+						}
+						chunked = hex - len(RES.Header.theBuffer[rn+2:RES.Header.position])
+						indexRNRN += hex + 4 + len(RES.Header.theBuffer[indexRNRN:rn])
+					}
+				} else {
+					contentLength = 0
 				}
 				continue
 			}
