@@ -98,7 +98,7 @@
 - Added `client.SetNoDelay` & `NagleOff` to off nagle algorithm
 - Added `StringToInt` & `IntToString` & `BytesToInt` & `IntToBytes` functions
 
-# v1.20.11 (26/2/17)
+# v1.26.0 (26/2/17)
 - Added `Client.Ipv6` & `Client.Ipv6Proxy` to full support Ipv6
 - Added support `Socks5` & `Socks4` proxies in `Client` object
 - Added `Client.DoPreRequest` to send request before using `Client.Do`
