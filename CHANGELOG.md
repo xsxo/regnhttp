@@ -97,3 +97,12 @@
 - Added `response.Reason` & `response.ReasonString`
 - Added `client.SetNoDelay` & `NagleOff` to off nagle algorithm
 - Added `StringToInt` & `IntToString` & `BytesToInt` & `IntToBytes` functions
+
+# v1.20.11 (26/2/17)
+- Added `Client.Ipv6` & `Client.Ipv6Proxy` to full support Ipv6
+- Added support `Socks5` & `Socks4` proxies in `Client` object
+- Added `Client.DoPreRequest` to send request before using `Client.Do`
+- Change reading chunk responses algorithm (faster in last chunk)
+- Remove DNS Cache (now it's work in Ipv6 only) 
+- Fix reading chunk responses (header & chunk body) in same packet like discord api`s
+- Fix reset response after Client return error and after reading lower new response

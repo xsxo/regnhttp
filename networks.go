@@ -467,7 +467,7 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 	RES.Header.position = 0
 	RES.Header.theBuffer = RES.Header.theBuffer[:RES.Header.bufferSize]
 	if err := c.Connect(REQ); err != nil {
-		RES.Reset()
+		// RES.Reset()
 		c.Close()
 		return err
 	}
@@ -475,7 +475,7 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 	c.run = true
 	if !c.boolPreRequst {
 		if _, err := c.flusher.Write(REQ.Header.raw[:REQ.Header.position]); err != nil {
-			RES.Reset()
+			// RES.Reset()
 			c.Close()
 			return err
 		}
@@ -483,7 +483,7 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 
 	c.boolPreRequst = false
 	if err := c.flusher.Flush(); err != nil {
-		RES.Reset()
+		// RES.Reset()
 		c.Close()
 		return err
 	}
@@ -493,6 +493,7 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 	var indexRNRN int = -1
 	var bufferd int
 	var contentLength int = -1
+
 	for contentLength != 0 {
 		if contentLength > 0 {
 			bufferd = min(c.ReadBufferSize, contentLength)
@@ -502,7 +503,7 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 			chunked -= bufferd
 		} else {
 			if _, err := c.peeker.Peek(1); err != nil {
-				RES.Reset()
+				// RES.Reset()
 				c.Close()
 				return err
 			}
@@ -511,14 +512,14 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 
 		raw, err := c.peeker.Peek(bufferd)
 		if err != nil {
-			RES.Reset()
+			// RES.Reset()
 			c.Close()
 			return err
 		}
 
 		_, err = c.peeker.Discard(bufferd)
 		if err != nil {
-			RES.Reset()
+			// RES.Reset()
 			c.Close()
 			return err
 		}
