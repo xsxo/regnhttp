@@ -16,7 +16,6 @@ func Example() {
 
 	// set timeout connection
 	clt.Timeout = time.Duration(20 * time.Second) // not required
-	clt.TimeoutRead = time.Duration(20 * time.Second)
 
 	// to set proxy connection
 	// clt.Proxy("http://username:password@host:port")

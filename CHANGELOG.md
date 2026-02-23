@@ -106,3 +106,12 @@
 - Remove DNS Cache (now it's work in Ipv6 only) 
 - Fix reading chunk responses (header & chunk body) in same packet like discord api`s
 - Fix reset response after Client return error and after reading lower new response
+
+- v1.40.0 (26/2/23)
+- Added `Client.RawConnectiot` object to get full control of connection
+- Added `Client.Writer` & `Client.Reader` object to get full control of writer and reader of client
+- Added `Client.SetDeadline` & `Client.SetWriteDeadline` & `Client.SetReadDeadline` to set deadline time in client
+- Change `Client.Tiemout` ojbect to include timeout connection with the server and with established proxy
+- Remove `Client.TimeoutRead` used `Client.SetReadDeadline` directly is better
+- Fix `Request.Close` & `Response.Close` function's
+- Fix Ipv6 open connection's with directly server and proxy server

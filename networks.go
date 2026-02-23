@@ -13,15 +13,15 @@ import (
 
 type Client struct {
 	// Timeout Connection (this option make the connection dosen't wait forever)
+	// the default value is 20 * time.Second
+	// for now this object include proxy established.
 	Timeout time.Duration
 
-	// Timeout Reading Responses (this option make the read function dosen't wait forever)
-	TimeoutRead time.Duration
-
 	// Tls Context // SSL Context
+	// for full control use Client.TLSConfig = &tls.Config{...}
 	TLSConfig *tls.Config
 
-	// Raw connection of the client
+	// Dialer of the raw connection to get full control objects of connection
 	Dialer *net.Dialer
 
 	// Buffer Size of Writer Requsts (default value is 4096)
@@ -30,26 +30,39 @@ type Client struct {
 	// Buffer Size of Reader Responses (default value is 4096)
 	ReadBufferSize int
 
-	// Net connection of Client
-	NetConnection net.Conn
-
-	// Ipv6 option need to hostname Ipv6
-	// Support Ipv6 proxies (socks4 dose not support)
-	// Support DNS cache (if use t his option the hostname will converted to Ipv6 and will saved in cache)
-	Ipv6 bool
+	// Raw net connection of Client object
+	// if this object is defined by the user before establishing the connection, the object itself will not be created on the client side.
+	// if the Client closed or return any err the connection will closed also
+	// if use https or 443 port need to use NetConnection.(*tls.Conn) to can use this object
+	RawConnection net.Conn
 
 	// Off Nagle algorithm
 	// Nagle algorithm: https://en.wikipedia.org/wiki/Nagle%27s_algorithm
 	SetNoDelay bool
 	NagleOff   bool
 
-	boolPreRequst bool
-	boolProxy     bool
-	hostConnected string
-	run           bool
+	// Writer of RawConnection (bufio.Writer)
+	// if this object is defined by the user before establishing the connection, the object itself will not be created on the client side, but the buffer pool will disabled.
+	// if the Raw Connction defined by the user use Client.Connect function to defined this object.
+	Writer *bufio.Writer
 
-	peeker  *bufio.Reader
-	flusher *bufio.Writer
+	// Writer of RawConnection (bufio.Writer)
+	// if this object is defined by the user before establishing the connection, the object itself will not be created on the client side, but the buffer pool will disabled.
+	// if the Raw Connction defined by the user use Client.Connect function to defined this object.
+	Reader *bufio.Reader
+
+	// Ipv6 option need to hostname Ipv6
+	// Support Ipv6 proxies (socks4 dose not support)
+	// support DNS cache (if use t his option the hostname will converted to Ipv6 and will saved in cache)
+	Ipv6 bool
+
+	boolCustomConnection bool
+	boolCustomWriter     bool
+	boolCustomReader     bool
+	boolPreRequst        bool
+	boolProxy            bool
+	run                  bool
+	hostConnected        string
 
 	authorization string
 	schemeProxy   string
@@ -61,25 +74,32 @@ type Client struct {
 
 // check status connection
 func (c *Client) Status() bool {
-	if c.hostConnected != "" {
+	if new, ok := c.RawConnection.(*tls.Conn); ok {
+		if new != nil {
+			return true
+		}
+	} else if c.RawConnection != nil {
 		return true
-	} else {
-		return false
 	}
-}
-
-// host & ip of connection
-func (c *Client) Host() string {
-	return c.hostConnected
+	return false
 }
 
 func (c *Client) connectNet(host string, port string) error {
-	if c.Timeout.Seconds() == 0 {
-		c.Timeout = time.Duration(20 * time.Second)
+	if new, ok := c.RawConnection.(*tls.Conn); ok {
+		if new != nil {
+			c.boolCustomConnection = true
+		}
+	} else if c.RawConnection != nil {
+		c.boolCustomConnection = true
 	}
 
-	if c.TimeoutRead.Seconds() == 0 {
-		c.TimeoutRead = c.Timeout
+	if c.boolCustomConnection {
+		c.createLines()
+		return nil
+	}
+
+	if c.Timeout.Seconds() == 0 {
+		c.Timeout = time.Duration(20 * time.Second)
 	}
 
 	if c.Dialer == nil {
@@ -89,15 +109,16 @@ func (c *Client) connectNet(host string, port string) error {
 	var err error
 	if port != "443" {
 		if c.Ipv6 && !c.boolProxy {
-			c.NetConnection, err = c.Dialer.Dial("tcp6", host+":"+port)
+			c.RawConnection, err = c.Dialer.Dial("tcp6", host+":"+port)
 		} else {
-			c.NetConnection, err = c.Dialer.Dial("tcp4", host+":"+port)
+			c.RawConnection, err = c.Dialer.Dial("tcp4", host+":"+port)
 		}
+
 	} else {
 		if c.Ipv6 && !c.boolProxy {
-			c.NetConnection, err = tls.DialWithDialer(c.Dialer, "tcp6", host+":"+port, c.TLSConfig)
+			c.RawConnection, err = tls.DialWithDialer(c.Dialer, "tcp6", host+":"+port, c.TLSConfig)
 		} else {
-			c.NetConnection, err = tls.DialWithDialer(c.Dialer, "tcp4", host+":"+port, c.TLSConfig)
+			c.RawConnection, err = tls.DialWithDialer(c.Dialer, "tcp4", host+":"+port, c.TLSConfig)
 		}
 	}
 
@@ -105,36 +126,67 @@ func (c *Client) connectNet(host string, port string) error {
 		return &RegnError{Message: "field create connection with '" + host + ":" + port + "' address\n" + err.Error()}
 	}
 
-	if (c.SetNoDelay || c.NagleOff) && port != "443" {
-		c.NetConnection.(*net.TCPConn).SetNoDelay(true)
+	if c.SetNoDelay || c.NagleOff {
+		if new, ok := c.RawConnection.(*tls.Conn); ok {
+			new.NetConn().(*net.TCPConn).SetNoDelay(true)
+		} else {
+			c.RawConnection.(*net.TCPConn).SetNoDelay(true)
+		}
 	}
-
-	c.NetConnection.SetReadDeadline(time.Now().Add(c.TimeoutRead))
-
 	c.createLines()
 	return nil
 }
 
-func (c *Client) connectHTTP(host string, port string) error {
-	c.flusher.WriteString("CONNECT " + host + ":" + port + " HTTP/1.1\r\nHost: " + host + ":" + port + "\r\n")
-	if c.authorization != "" {
-		c.flusher.WriteString("Proxy-Authorization: Basic " + c.authorization + "\r\n")
+func (c *Client) SetDeadline(timer time.Time) {
+	if new, ok := c.RawConnection.(*tls.Conn); ok {
+		if new != nil {
+			new.SetDeadline(timer)
+		}
+	} else if c.RawConnection != nil {
+		c.RawConnection.SetDeadline(timer)
 	}
-	c.flusher.Write(line)
+}
 
-	if err := c.flusher.Flush(); err != nil {
+func (c *Client) SetWriteDeadline(timer time.Time) {
+	if new, ok := c.RawConnection.(*tls.Conn); ok {
+		if new != nil {
+			new.SetWriteDeadline(timer)
+		}
+	} else if c.RawConnection != nil {
+		c.RawConnection.SetWriteDeadline(timer)
+	}
+}
+
+func (c *Client) SetReadDeadline(timer time.Time) {
+	if new, ok := c.RawConnection.(*tls.Conn); ok {
+		if new != nil {
+			new.SetReadDeadline(timer)
+		}
+	} else if c.RawConnection != nil {
+		c.RawConnection.SetReadDeadline(timer)
+	}
+}
+
+func (c *Client) connectHTTP(host string, port string) error {
+	c.Writer.WriteString("CONNECT " + host + ":" + port + " HTTP/1.1\r\nHost: " + host + ":" + port + "\r\n")
+	if c.authorization != "" {
+		c.Writer.WriteString("Proxy-Authorization: Basic " + c.authorization + "\r\n")
+	}
+	c.Writer.Write(line)
+
+	if err := c.Writer.Flush(); err != nil {
 		c.Close()
 		return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (Flush)"}
 	}
 
-	if raw, err := c.peeker.Peek(16); err != nil {
+	if raw, err := c.Reader.Peek(16); err != nil {
 		return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (Peek)"}
 	} else {
 		if !bytes.Contains(raw, []byte{50, 48, 48}) {
 			c.Close()
 			return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (Contains)"}
 		}
-		c.peeker.Discard(c.peeker.Buffered())
+		c.Reader.Discard(c.Reader.Buffered())
 	}
 
 	return nil
@@ -145,17 +197,17 @@ func (c *Client) connectSOCKS4(host string, port string) error {
 		panic("socks4 proxy dose not support Ipv6")
 	}
 
-	c.flusher.Write([]byte{0x04, 0x01}) // ver, meth
-	binary.Write(c.flusher, binary.BigEndian, uint16(StringToInt(port)))
+	c.Writer.Write([]byte{0x04, 0x01}) // ver, meth
+	binary.Write(c.Writer, binary.BigEndian, uint16(StringToInt(port)))
 
-	c.flusher.WriteByte(0x00) // userid
+	c.Writer.WriteByte(0x00) // userid
 
-	if err := c.flusher.Flush(); err != nil {
+	if err := c.Writer.Flush(); err != nil {
 		c.Close()
 		return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (Flush)"}
 	}
 
-	raw, err := c.peeker.Peek(2)
+	raw, err := c.Reader.Peek(2)
 	if err != nil {
 		c.Close()
 		return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (Peek)"}
@@ -163,7 +215,7 @@ func (c *Client) connectSOCKS4(host string, port string) error {
 		c.Close()
 		return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (raw[1] != 0x5A) 1"}
 	}
-	c.peeker.Discard(c.peeker.Buffered())
+	c.Reader.Discard(c.Reader.Buffered())
 
 	return nil
 }
@@ -171,17 +223,17 @@ func (c *Client) connectSOCKS4(host string, port string) error {
 func (c *Client) connectSOCKS5(host string, port string) error {
 	// ver, meth = open, auth
 	if c.authorization != "" {
-		c.flusher.Write([]byte{0x05, 0x01, 0x02})
+		c.Writer.Write([]byte{0x05, 0x01, 0x02})
 	} else {
-		c.flusher.Write([]byte{0x05, 0x01, 0x00})
+		c.Writer.Write([]byte{0x05, 0x01, 0x00})
 	}
 
-	if err := c.flusher.Flush(); err != nil {
+	if err := c.Writer.Flush(); err != nil {
 		c.Close()
 		return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (Flush)"}
 	}
 
-	raw, err := c.peeker.Peek(2)
+	raw, err := c.Reader.Peek(2)
 	if err != nil {
 		c.Close()
 		return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (Peek)"}
@@ -189,20 +241,20 @@ func (c *Client) connectSOCKS5(host string, port string) error {
 		c.Close()
 		return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (raw[1] != 0x5A) 1"}
 	}
-	c.peeker.Discard(c.peeker.Buffered())
+	c.Reader.Discard(c.Reader.Buffered())
 
 	if c.authorization != "" {
-		c.flusher.WriteByte(0x01)
-		c.flusher.WriteByte(byte(len(c.userProxy)))
-		c.flusher.Write([]byte(c.userProxy))
-		c.flusher.WriteByte(byte(len(c.passProxy)))
-		c.flusher.Write([]byte(c.passProxy))
-		if err := c.flusher.Flush(); err != nil {
+		c.Writer.WriteByte(0x01)
+		c.Writer.WriteByte(byte(len(c.userProxy)))
+		c.Writer.Write([]byte(c.userProxy))
+		c.Writer.WriteByte(byte(len(c.passProxy)))
+		c.Writer.Write([]byte(c.passProxy))
+		if err := c.Writer.Flush(); err != nil {
 			c.Close()
 			return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (Flush)"}
 		}
 
-		raw, err = c.peeker.Peek(2)
+		raw, err = c.Reader.Peek(2)
 		if err != nil {
 			c.Close()
 			return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (Peek)"}
@@ -210,30 +262,30 @@ func (c *Client) connectSOCKS5(host string, port string) error {
 			c.Close()
 			return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (raw[1] != 0x5A) 2"}
 		}
-		c.peeker.Discard(c.peeker.Buffered())
+		c.Reader.Discard(c.Reader.Buffered())
 	}
 
 	// ver, meth = connect, rsv
-	c.flusher.Write([]byte{0x05, 0x01, 0x00})
+	c.Writer.Write([]byte{0x05, 0x01, 0x00})
 
 	if c.Ipv6 {
-		c.flusher.WriteByte(0x04) // IPv6
-		c.flusher.WriteString(host)
-		binary.Write(c.flusher, binary.BigEndian, uint16(StringToInt(port)))
+		c.Writer.WriteByte(0x04) // IPv6
+		c.Writer.WriteString(host)
+		binary.Write(c.Writer, binary.BigEndian, uint16(StringToInt(port)))
 	} else {
-		c.flusher.WriteByte(0x03) // Domain
-		c.flusher.WriteByte(byte(len(host)))
+		c.Writer.WriteByte(0x03) // Domain
+		c.Writer.WriteByte(byte(len(host)))
 	}
 
-	c.flusher.WriteString(host)
-	binary.Write(c.flusher, binary.BigEndian, uint16(StringToInt(port)))
+	c.Writer.WriteString(host)
+	binary.Write(c.Writer, binary.BigEndian, uint16(StringToInt(port)))
 
-	if err := c.flusher.Flush(); err != nil {
+	if err := c.Writer.Flush(); err != nil {
 		c.Close()
 		return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (Flush)"}
 	}
 
-	raw, err = c.peeker.Peek(2)
+	raw, err = c.Reader.Peek(2)
 	if err != nil {
 		c.Close()
 		return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (Peek)"}
@@ -241,13 +293,17 @@ func (c *Client) connectSOCKS5(host string, port string) error {
 		c.Close()
 		return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (raw[1] != 0x5A) 3"}
 	}
-	c.peeker.Discard(c.peeker.Buffered())
+	c.Reader.Discard(c.Reader.Buffered())
 
 	return nil
 }
 
 func (c *Client) Proxy(Url string) {
-	if c.hostConnected != "" {
+	if new, ok := c.RawConnection.(*tls.Conn); ok {
+		if new != nil {
+			panic("can not set proxy after connect with server")
+		}
+	} else if c.RawConnection != nil {
 		panic("can not set proxy after connect with server")
 	}
 
@@ -292,37 +348,40 @@ func (c *Client) Proxy(Url string) {
 }
 
 func (c *Client) Close() {
-	if new, ok := c.NetConnection.(*tls.Conn); ok {
+	if new, ok := c.RawConnection.(*tls.Conn); ok {
 		if new != nil {
 			new.Close()
-			c.NetConnection.Close()
-			c.NetConnection = nil
+			c.RawConnection.Close()
+			c.RawConnection = nil
 		}
-	} else if c.NetConnection != nil {
-		c.NetConnection.Close()
-		c.NetConnection = nil
+	} else if c.RawConnection != nil {
+		c.RawConnection.Close()
+		c.RawConnection = nil
 	}
 
 	c.closeLines()
 	c.hostConnected = ""
 	c.boolPreRequst = false
+	c.boolCustomConnection = false
+	c.boolCustomWriter = false
+	c.boolCustomReader = false
 	c.run = false
 }
 
 func (c *Client) closeLines() {
-	if c.peeker != nil {
-		peekerPool.Put(c.peeker)
-		c.peeker = nil
+	if c.Writer != nil && !c.boolCustomWriter {
+		flusherPool.Put(c.Writer)
+		c.Writer = nil
 	}
 
-	if c.flusher != nil {
-		flusherPool.Put(c.flusher)
-		c.flusher = nil
+	if c.Reader != nil && !c.boolCustomReader {
+		peekerPool.Put(c.Reader)
+		c.Reader = nil
 	}
 }
 
 func (c *Client) createLines() {
-	c.closeLines()
+	// c.closeLines()
 
 	if c.ReadBufferSize == 0 {
 		c.ReadBufferSize = 4096
@@ -332,19 +391,32 @@ func (c *Client) createLines() {
 		c.WriteBufferSize = 4096
 	}
 
-	c.peeker = genPeeker(c.ReadBufferSize)
-	c.flusher = genFlusher(c.WriteBufferSize)
+	if c.Writer == nil {
+		c.Writer = genFlusher(c.WriteBufferSize)
+	} else {
+		c.boolCustomWriter = true
+	}
 
-	if new, ok := c.NetConnection.(*tls.Conn); ok {
-		c.flusher.Reset(new)
-		c.peeker.Reset(new)
-	} else if c.NetConnection != nil {
-		c.flusher.Reset(c.NetConnection)
-		c.peeker.Reset(c.NetConnection)
+	if c.Reader == nil {
+		c.Reader = genPeeker(c.ReadBufferSize)
+	} else {
+		c.boolCustomReader = true
+	}
+
+	if new, ok := c.RawConnection.(*tls.Conn); ok {
+		c.Writer.Reset(new)
+		c.Reader.Reset(new)
+	} else if c.RawConnection != nil {
+		c.Writer.Reset(c.RawConnection)
+		c.Reader.Reset(c.RawConnection)
 	}
 }
 
 func (c *Client) Connect(REQ *RequestType) error {
+	if c.boolCustomConnection {
+		return nil
+	}
+
 	if c.hostConnected != REQ.Header.myhost && c.hostConnected != "" {
 		c.Close()
 	}
@@ -380,6 +452,11 @@ func (c *Client) Connect(REQ *RequestType) error {
 				return err
 			}
 
+			if c.boolCustomConnection {
+				return nil
+			}
+
+			c.RawConnection.SetDeadline(time.Now().Add(c.Timeout))
 			switch c.schemeProxy {
 			case "https", "http":
 				if err := c.connectHTTP(REQ.Header.myhost, REQ.Header.myport); err != nil {
@@ -410,20 +487,24 @@ func (c *Client) Connect(REQ *RequestType) error {
 					return err
 				}
 			}
+			c.RawConnection.SetDeadline(time.Time{})
 
 			if REQ.Header.myport == "443" || REQ.Header.mytls || c.schemeProxy == "https" {
-				c.NetConnection = tls.Client(c.NetConnection, c.TLSConfig)
+				c.RawConnection = tls.Client(c.RawConnection, c.TLSConfig)
 				c.createLines()
 			}
-
 		} else {
 			if err := c.connectNet(REQ.Header.myhost, REQ.Header.myport); err != nil {
 				c.Close()
 				return err
 			}
 
+			if c.boolCustomConnection {
+				return nil
+			}
+
 			if REQ.Header.mytls {
-				c.NetConnection = tls.Client(c.NetConnection, c.TLSConfig)
+				c.RawConnection = tls.Client(c.RawConnection, c.TLSConfig)
 				c.createLines()
 			}
 		}
@@ -442,17 +523,17 @@ func (c *Client) DoPreRequest(REQ *RequestType) error {
 
 	c.run = true
 	c.boolPreRequst = true
-	if _, err := c.flusher.Write(REQ.Header.raw[:REQ.Header.position-1]); err != nil {
+	if _, err := c.Writer.Write(REQ.Header.raw[:REQ.Header.position-1]); err != nil {
 		c.Close()
 		return err
 	}
 
-	if err := c.flusher.Flush(); err != nil {
+	if err := c.Writer.Flush(); err != nil {
 		c.Close()
 		return err
 	}
 
-	if _, err := c.flusher.Write(REQ.Header.raw[REQ.Header.position-1 : REQ.Header.position]); err != nil {
+	if _, err := c.Writer.Write(REQ.Header.raw[REQ.Header.position-1 : REQ.Header.position]); err != nil {
 		c.Close()
 		return err
 	}
@@ -473,7 +554,7 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 
 	c.run = true
 	if !c.boolPreRequst {
-		if _, err := c.flusher.Write(REQ.Header.raw[:REQ.Header.position]); err != nil {
+		if _, err := c.Writer.Write(REQ.Header.raw[:REQ.Header.position]); err != nil {
 			// RES.Reset()
 			c.Close()
 			return err
@@ -481,7 +562,7 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 	}
 
 	c.boolPreRequst = false
-	if err := c.flusher.Flush(); err != nil {
+	if err := c.Writer.Flush(); err != nil {
 		// RES.Reset()
 		c.Close()
 		return err
@@ -501,22 +582,22 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 			bufferd = min(c.ReadBufferSize, chunked+7)
 			chunked -= bufferd
 		} else {
-			if _, err := c.peeker.Peek(1); err != nil {
+			if _, err := c.Reader.Peek(1); err != nil {
 				// RES.Reset()
 				c.Close()
 				return err
 			}
-			bufferd = c.peeker.Buffered()
+			bufferd = c.Reader.Buffered()
 		}
 
-		raw, err := c.peeker.Peek(bufferd)
+		raw, err := c.Reader.Peek(bufferd)
 		if err != nil {
 			// RES.Reset()
 			c.Close()
 			return err
 		}
 
-		_, err = c.peeker.Discard(bufferd)
+		_, err = c.Reader.Discard(bufferd)
 		if err != nil {
 			// RES.Reset()
 			c.Close()
