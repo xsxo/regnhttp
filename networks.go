@@ -351,7 +351,6 @@ func (c *Client) Connect(REQ *RequestType) error {
 
 	if c.TLSConfig == nil {
 		c.TLSConfig = &tls.Config{}
-		c.TLSConfig.InsecureSkipVerify = false
 	}
 
 	if c.run {
@@ -359,22 +358,22 @@ func (c *Client) Connect(REQ *RequestType) error {
 		panic("concurrent client goroutines")
 	}
 
-	if c.Ipv6 && !REQ.Header.myipv6 {
+	if c.Ipv6 && c.boolProxy && !REQ.Header.myipv6 {
 		REQ.Header.myipv6 = true
-		ips, err := net.LookupIP(REQ.Header.myhost)
+		ips, err := net.LookupIP(REQ.Header.sshost)
 		if err != nil {
 			return err
 		}
 		for _, ip := range ips {
 			if ip.To16() != nil {
-				REQ.Header.myhost = ip.String()
+				REQ.Header.myhost = "[" + ip.String() + "]"
 				break
 			}
 		}
 	}
 
 	if c.hostConnected == "" {
-		c.TLSConfig.ServerName = REQ.Header.myhost
+		c.TLSConfig.ServerName = REQ.Header.sshost
 		if c.boolProxy {
 			if err := c.connectNet(c.hostProxy, c.portProxy); err != nil {
 				c.Close()

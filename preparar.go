@@ -11,6 +11,7 @@ type ConnectionInformation struct {
 	mytls  bool
 	myport string
 	myhost string
+	sshost string
 
 	raw        []byte
 	bufferSize int
@@ -24,14 +25,16 @@ type RequestType struct {
 func (REQ *RequestType) Close() {
 	REQ.Header.raw = nil
 	REQ.Header.bufferSize = 0
+	REQ.Header.position = 0
 }
 
 func (REQ *RequestType) Reset() {
 	REQ.Header.myipv4 = false
 	REQ.Header.myipv6 = false
 	REQ.Header.mytls = false
-	REQ.Header.myhost = ""
 	REQ.Header.myport = ""
+	REQ.Header.myhost = ""
+	REQ.Header.sshost = ""
 
 	REQ.Header.raw = REQ.Header.raw[:0]
 	REQ.Header.raw = REQ.Header.raw[:REQ.Header.bufferSize]
@@ -68,8 +71,9 @@ func (REQ *RequestType) SetURL(Url string) {
 	REQ.Header.myipv4 = false
 	REQ.Header.myipv6 = false
 	REQ.Header.mytls = false
-	REQ.Header.myhost = ""
 	REQ.Header.myport = ""
+	REQ.Header.myhost = ""
+	REQ.Header.sshost = ""
 
 	Parse, err := url.Parse(Url)
 
@@ -98,6 +102,7 @@ func (REQ *RequestType) SetURL(Url string) {
 		panic("no supplied hostname")
 	} else {
 		REQ.Header.myhost = Parse.Hostname()
+		REQ.Header.sshost = REQ.Header.myhost
 	}
 
 	var api []byte
@@ -122,7 +127,7 @@ func (REQ *RequestType) SetURL(Url string) {
 	if REQ.Header.position > REQ.Header.bufferSize {
 		panic("regn.Request " + IntToString(REQ.Header.bufferSize) + " buffer is small\nupper it to " + IntToString(REQ.Header.position))
 	}
-	REQ.Header.Set("Host", REQ.Header.myhost)
+	REQ.Header.Set("Host", REQ.Header.sshost)
 }
 
 func (REQ *ConnectionInformation) Set(key string, value string) {

@@ -18,6 +18,7 @@ type ResponseType struct {
 func (RES *ResponseType) Close() {
 	RES.Header.theBuffer = nil
 	RES.Header.bufferSize = 0
+	RES.Header.position = 0
 }
 
 func (RES *ResponseType) Reset() {
