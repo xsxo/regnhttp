@@ -613,37 +613,29 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 			RES.Header.bufferSize += bufferd
 		}
 
-		if chunkedB && chunked <= 0 {
-			for {
-				if indexRNRN > RES.Header.position {
-					break
-				}
-
-				rn := bytes.Index(RES.Header.theBuffer[indexRNRN:RES.Header.position], line)
-				if rn == -1 {
-					break
-				}
-
-				start := indexRNRN
-				hex, b := hexBytesToInt(RES.Header.theBuffer[start : indexRNRN+rn])
-				if !b || hex == 0 {
-					contentLength = 0
-					break
-				} else if hex == 0 {
-					contentLength = 0
-					break
-				}
-
-				if len(RES.Header.theBuffer[indexRNRN+rn+2:RES.Header.position]) > hex {
-					chunked = 0
-				} else {
-					chunked = hex - len(RES.Header.theBuffer[indexRNRN+rn+2:RES.Header.position])
-				}
-
-				indexRNRN += hex + 4 + len(RES.Header.theBuffer[start:indexRNRN+rn])
+		for chunkedB && chunked <= 0 {
+			if indexRNRN > RES.Header.position {
 				break
 			}
-			continue
+
+			rn := bytes.Index(RES.Header.theBuffer[indexRNRN:RES.Header.position], line)
+			if rn == -1 {
+				break
+			}
+
+			start := indexRNRN
+			hex, b := hexBytesToInt(RES.Header.theBuffer[start : indexRNRN+rn])
+			if !b || hex == 0 {
+				contentLength = 0
+				break
+			}
+
+			if len(RES.Header.theBuffer[indexRNRN+rn+2:RES.Header.position]) > hex {
+				chunked = 0
+			} else {
+				chunked = hex - len(RES.Header.theBuffer[indexRNRN+rn+2:RES.Header.position])
+			}
+			indexRNRN += hex + 4 + len(RES.Header.theBuffer[start:indexRNRN+rn])
 		}
 
 		if indexRNRN == -1 {
@@ -664,11 +656,16 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 						}
 						hex, b := hexBytesToInt(RES.Header.theBuffer[indexRNRN:rn])
 						if !b || hex == 0 {
-							continue
-						} else if hex == 0 {
+							contentLength = 0
 							continue
 						}
-						chunked = hex - len(RES.Header.theBuffer[rn+2:RES.Header.position])
+
+						if len(RES.Header.theBuffer[indexRNRN+rn+2:RES.Header.position]) > hex {
+							chunked = 0
+						} else {
+							chunked = hex - len(RES.Header.theBuffer[indexRNRN+rn+2:RES.Header.position])
+						}
+
 						indexRNRN += hex + 4 + len(RES.Header.theBuffer[indexRNRN:rn])
 					}
 				} else {
