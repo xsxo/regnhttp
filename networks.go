@@ -41,24 +41,15 @@ type Client struct {
 	SetNoDelay bool
 	NagleOff   bool
 
-	// Writer of RawConnection (bufio.Writer)
-	// if this object is defined by the user before establishing the connection, the object itself will not be created on the client side, but the buffer pool will disabled.
-	// if the Raw Connction defined by the user use Client.Connect function to defined this object.
-	Writer *bufio.Writer
-
-	// Writer of RawConnection (bufio.Writer)
-	// if this object is defined by the user before establishing the connection, the object itself will not be created on the client side, but the buffer pool will disabled.
-	// if the Raw Connction defined by the user use Client.Connect function to defined this object.
-	Reader *bufio.Reader
-
 	// Ipv6 option need to hostname Ipv6
 	// Support Ipv6 proxies (socks4 dose not support)
 	// support DNS cache (if use t his option the hostname will converted to Ipv6 and will saved in cache)
 	Ipv6 bool
 
+	writer *bufio.Writer
+	reader *bufio.Reader
+
 	boolCustomConnection bool
-	boolCustomWriter     bool
-	boolCustomReader     bool
 	boolPreRequst        bool
 	boolProxy            bool
 	run                  bool
@@ -168,25 +159,26 @@ func (c *Client) SetReadDeadline(timer time.Time) {
 }
 
 func (c *Client) connectHTTP(host string, port string) error {
-	c.Writer.WriteString("CONNECT " + host + ":" + port + " HTTP/1.1\r\nHost: " + host + ":" + port + "\r\n")
+	c.writer.WriteString("CONNECT " + host + ":" + port + " HTTP/1.1\r\nHost: " + host + ":" + port + "\r\n")
 	if c.authorization != "" {
-		c.Writer.WriteString("Proxy-Authorization: Basic " + c.authorization + "\r\n")
+		c.writer.WriteString("Proxy-Authorization: Basic " + c.authorization + "\r\n")
 	}
-	c.Writer.Write(line)
+	c.writer.Write(line)
 
-	if err := c.Writer.Flush(); err != nil {
+	if err := c.writer.Flush(); err != nil {
 		c.Close()
 		return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (Flush)"}
 	}
 
-	if raw, err := c.Reader.Peek(16); err != nil {
+	if raw, err := c.reader.Peek(16); err != nil {
+		c.Close()
 		return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (Peek)"}
 	} else {
 		if !bytes.Contains(raw, []byte{50, 48, 48}) {
 			c.Close()
 			return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (Contains)"}
 		}
-		c.Reader.Discard(c.Reader.Buffered())
+		c.reader.Discard(c.reader.Buffered())
 	}
 
 	return nil
@@ -197,17 +189,17 @@ func (c *Client) connectSOCKS4(host string, port string) error {
 		panic("socks4 proxy dose not support Ipv6")
 	}
 
-	c.Writer.Write([]byte{0x04, 0x01}) // ver, meth
-	binary.Write(c.Writer, binary.BigEndian, uint16(StringToInt(port)))
+	c.writer.Write([]byte{0x04, 0x01}) // ver, meth
+	binary.Write(c.writer, binary.BigEndian, uint16(StringToInt(port)))
 
-	c.Writer.WriteByte(0x00) // userid
+	c.writer.WriteByte(0x00) // userid
 
-	if err := c.Writer.Flush(); err != nil {
+	if err := c.writer.Flush(); err != nil {
 		c.Close()
 		return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (Flush)"}
 	}
 
-	raw, err := c.Reader.Peek(2)
+	raw, err := c.reader.Peek(2)
 	if err != nil {
 		c.Close()
 		return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (Peek)"}
@@ -215,7 +207,7 @@ func (c *Client) connectSOCKS4(host string, port string) error {
 		c.Close()
 		return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (raw[1] != 0x5A) 1"}
 	}
-	c.Reader.Discard(c.Reader.Buffered())
+	c.reader.Discard(c.reader.Buffered())
 
 	return nil
 }
@@ -223,17 +215,17 @@ func (c *Client) connectSOCKS4(host string, port string) error {
 func (c *Client) connectSOCKS5(host string, port string) error {
 	// ver, meth = open, auth
 	if c.authorization != "" {
-		c.Writer.Write([]byte{0x05, 0x01, 0x02})
+		c.writer.Write([]byte{0x05, 0x01, 0x02})
 	} else {
-		c.Writer.Write([]byte{0x05, 0x01, 0x00})
+		c.writer.Write([]byte{0x05, 0x01, 0x00})
 	}
 
-	if err := c.Writer.Flush(); err != nil {
+	if err := c.writer.Flush(); err != nil {
 		c.Close()
 		return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (Flush)"}
 	}
 
-	raw, err := c.Reader.Peek(2)
+	raw, err := c.reader.Peek(2)
 	if err != nil {
 		c.Close()
 		return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (Peek)"}
@@ -241,20 +233,20 @@ func (c *Client) connectSOCKS5(host string, port string) error {
 		c.Close()
 		return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (raw[1] != 0x5A) 1"}
 	}
-	c.Reader.Discard(c.Reader.Buffered())
+	c.reader.Discard(c.reader.Buffered())
 
 	if c.authorization != "" {
-		c.Writer.WriteByte(0x01)
-		c.Writer.WriteByte(byte(len(c.userProxy)))
-		c.Writer.Write([]byte(c.userProxy))
-		c.Writer.WriteByte(byte(len(c.passProxy)))
-		c.Writer.Write([]byte(c.passProxy))
-		if err := c.Writer.Flush(); err != nil {
+		c.writer.WriteByte(0x01)
+		c.writer.WriteByte(byte(len(c.userProxy)))
+		c.writer.Write([]byte(c.userProxy))
+		c.writer.WriteByte(byte(len(c.passProxy)))
+		c.writer.Write([]byte(c.passProxy))
+		if err := c.writer.Flush(); err != nil {
 			c.Close()
 			return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (Flush)"}
 		}
 
-		raw, err = c.Reader.Peek(2)
+		raw, err = c.reader.Peek(2)
 		if err != nil {
 			c.Close()
 			return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (Peek)"}
@@ -262,30 +254,30 @@ func (c *Client) connectSOCKS5(host string, port string) error {
 			c.Close()
 			return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (raw[1] != 0x5A) 2"}
 		}
-		c.Reader.Discard(c.Reader.Buffered())
+		c.reader.Discard(c.reader.Buffered())
 	}
 
 	// ver, meth = connect, rsv
-	c.Writer.Write([]byte{0x05, 0x01, 0x00})
+	c.writer.Write([]byte{0x05, 0x01, 0x00})
 
 	if c.Ipv6 {
-		c.Writer.WriteByte(0x04) // IPv6
-		c.Writer.WriteString(host)
-		binary.Write(c.Writer, binary.BigEndian, uint16(StringToInt(port)))
+		c.writer.WriteByte(0x04) // IPv6
+		c.writer.WriteString(host)
+		binary.Write(c.writer, binary.BigEndian, uint16(StringToInt(port)))
 	} else {
-		c.Writer.WriteByte(0x03) // Domain
-		c.Writer.WriteByte(byte(len(host)))
+		c.writer.WriteByte(0x03) // Domain
+		c.writer.WriteByte(byte(len(host)))
 	}
 
-	c.Writer.WriteString(host)
-	binary.Write(c.Writer, binary.BigEndian, uint16(StringToInt(port)))
+	c.writer.WriteString(host)
+	binary.Write(c.writer, binary.BigEndian, uint16(StringToInt(port)))
 
-	if err := c.Writer.Flush(); err != nil {
+	if err := c.writer.Flush(); err != nil {
 		c.Close()
 		return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (Flush)"}
 	}
 
-	raw, err = c.Reader.Peek(2)
+	raw, err = c.reader.Peek(2)
 	if err != nil {
 		c.Close()
 		return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (Peek)"}
@@ -293,7 +285,7 @@ func (c *Client) connectSOCKS5(host string, port string) error {
 		c.Close()
 		return &RegnError{Message: "field proxy connection with '" + host + ":" + port + "' address (raw[1] != 0x5A) 3"}
 	}
-	c.Reader.Discard(c.Reader.Buffered())
+	c.reader.Discard(c.reader.Buffered())
 
 	return nil
 }
@@ -363,20 +355,18 @@ func (c *Client) Close() {
 	c.hostConnected = ""
 	c.boolPreRequst = false
 	c.boolCustomConnection = false
-	c.boolCustomWriter = false
-	c.boolCustomReader = false
 	c.run = false
 }
 
 func (c *Client) closeLines() {
-	if c.Writer != nil && !c.boolCustomWriter {
-		flusherPool.Put(c.Writer)
-		c.Writer = nil
+	if c.writer != nil {
+		flusherPool.Put(c.writer)
+		c.writer = nil
 	}
 
-	if c.Reader != nil && !c.boolCustomReader {
-		peekerPool.Put(c.Reader)
-		c.Reader = nil
+	if c.reader != nil {
+		peekerPool.Put(c.reader)
+		c.reader = nil
 	}
 }
 
@@ -391,24 +381,15 @@ func (c *Client) createLines() {
 		c.WriteBufferSize = 4096
 	}
 
-	if c.Writer == nil {
-		c.Writer = genFlusher(c.WriteBufferSize)
-	} else {
-		c.boolCustomWriter = true
-	}
-
-	if c.Reader == nil {
-		c.Reader = genPeeker(c.ReadBufferSize)
-	} else {
-		c.boolCustomReader = true
-	}
+	c.writer = genFlusher(c.WriteBufferSize)
+	c.reader = genPeeker(c.ReadBufferSize)
 
 	if new, ok := c.RawConnection.(*tls.Conn); ok {
-		c.Writer.Reset(new)
-		c.Reader.Reset(new)
+		c.writer.Reset(new)
+		c.reader.Reset(new)
 	} else if c.RawConnection != nil {
-		c.Writer.Reset(c.RawConnection)
-		c.Reader.Reset(c.RawConnection)
+		c.writer.Reset(c.RawConnection)
+		c.reader.Reset(c.RawConnection)
 	}
 }
 
@@ -523,17 +504,17 @@ func (c *Client) DoPreRequest(REQ *RequestType) error {
 
 	c.run = true
 	c.boolPreRequst = true
-	if _, err := c.Writer.Write(REQ.Header.raw[:REQ.Header.position-1]); err != nil {
+	if _, err := c.writer.Write(REQ.Header.raw[:REQ.Header.position-1]); err != nil {
 		c.Close()
 		return err
 	}
 
-	if err := c.Writer.Flush(); err != nil {
+	if err := c.writer.Flush(); err != nil {
 		c.Close()
 		return err
 	}
 
-	if _, err := c.Writer.Write(REQ.Header.raw[REQ.Header.position-1 : REQ.Header.position]); err != nil {
+	if _, err := c.writer.Write(REQ.Header.raw[REQ.Header.position-1 : REQ.Header.position]); err != nil {
 		c.Close()
 		return err
 	}
@@ -542,28 +523,40 @@ func (c *Client) DoPreRequest(REQ *RequestType) error {
 	return nil
 }
 
-// Not support goroutine-safe
+func (c *Client) DoTimeout(REQ *RequestType, RES *ResponseType, Timeout time.Duration) error {
+	if err := c.Connect(REQ); err != nil {
+		c.Close()
+		return err
+	}
+
+	c.RawConnection.SetDeadline(time.Now().Add(Timeout))
+	if err := c.Do(REQ, RES); err != nil {
+		c.Close()
+		return err
+	}
+	c.RawConnection.SetDeadline(time.Time{})
+	return nil
+}
+
+// not support goroutine-safe (mutli threads)
 func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 	RES.Header.position = 0
 	RES.Header.theBuffer = RES.Header.theBuffer[:RES.Header.bufferSize]
 	if err := c.Connect(REQ); err != nil {
-		// RES.Reset()
 		c.Close()
 		return err
 	}
 
 	c.run = true
 	if !c.boolPreRequst {
-		if _, err := c.Writer.Write(REQ.Header.raw[:REQ.Header.position]); err != nil {
-			// RES.Reset()
+		if _, err := c.writer.Write(REQ.Header.raw[:REQ.Header.position]); err != nil {
 			c.Close()
 			return err
 		}
 	}
 
 	c.boolPreRequst = false
-	if err := c.Writer.Flush(); err != nil {
-		// RES.Reset()
+	if err := c.writer.Flush(); err != nil {
 		c.Close()
 		return err
 	}
@@ -582,24 +575,21 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 			bufferd = min(c.ReadBufferSize, chunked+7)
 			chunked -= bufferd
 		} else {
-			if _, err := c.Reader.Peek(1); err != nil {
-				// RES.Reset()
+			if _, err := c.reader.Peek(1); err != nil {
 				c.Close()
 				return err
 			}
-			bufferd = c.Reader.Buffered()
+			bufferd = c.reader.Buffered()
 		}
 
-		raw, err := c.Reader.Peek(bufferd)
+		raw, err := c.reader.Peek(bufferd)
 		if err != nil {
-			// RES.Reset()
 			c.Close()
 			return err
 		}
 
-		_, err = c.Reader.Discard(bufferd)
+		_, err = c.reader.Discard(bufferd)
 		if err != nil {
-			// RES.Reset()
 			c.Close()
 			return err
 		}
@@ -613,32 +603,28 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 			RES.Header.bufferSize += bufferd
 		}
 
-		for chunkedB && chunked <= 0 {
-			if indexRNRN > RES.Header.position {
-				break
-			}
+		if chunkedB {
+			for chunked <= 0 {
+				rn := bytes.Index(RES.Header.theBuffer[indexRNRN:RES.Header.position], line)
+				if rn == -1 {
+					break
+				}
 
-			rn := bytes.Index(RES.Header.theBuffer[indexRNRN:RES.Header.position], line)
-			if rn == -1 {
-				break
-			}
+				start := indexRNRN
+				hex, b := hexBytesToInt(RES.Header.theBuffer[start : indexRNRN+rn])
+				if !b || hex == 0 {
+					contentLength = 0
+					break
+				}
 
-			start := indexRNRN
-			hex, b := hexBytesToInt(RES.Header.theBuffer[start : indexRNRN+rn])
-			if !b || hex == 0 {
-				contentLength = 0
-				break
+				if len(RES.Header.theBuffer[indexRNRN+rn+2:RES.Header.position]) > hex {
+					chunked = 0
+				} else {
+					chunked = hex - len(RES.Header.theBuffer[indexRNRN+rn+2:RES.Header.position])
+				}
+				indexRNRN += hex + 4 + len(RES.Header.theBuffer[start:indexRNRN+rn])
 			}
-
-			if len(RES.Header.theBuffer[indexRNRN+rn+2:RES.Header.position]) > hex {
-				chunked = 0
-			} else {
-				chunked = hex - len(RES.Header.theBuffer[indexRNRN+rn+2:RES.Header.position])
-			}
-			indexRNRN += hex + 4 + len(RES.Header.theBuffer[start:indexRNRN+rn])
-		}
-
-		if indexRNRN == -1 {
+		} else if indexRNRN == -1 {
 			indexRNRN = bytes.Index(RES.Header.theBuffer[:RES.Header.position], lines)
 			if indexRNRN == -1 {
 				continue
@@ -650,26 +636,29 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 					chunkedB = true
 					indexRNRN += 4
 					if RES.Header.position > indexRNRN {
-						rn := bytes.Index(RES.Header.theBuffer[indexRNRN:RES.Header.position], line) + indexRNRN
-						if rn == indexRNRN-1 {
-							continue
-						}
-						hex, b := hexBytesToInt(RES.Header.theBuffer[indexRNRN:rn])
-						if !b || hex == 0 {
-							contentLength = 0
-							continue
-						}
+						for chunkedB && chunked <= 0 {
+							rn := bytes.Index(RES.Header.theBuffer[indexRNRN:RES.Header.position], line)
+							if rn == -1 {
+								break
+							}
 
-						if len(RES.Header.theBuffer[indexRNRN+rn+2:RES.Header.position]) > hex {
-							chunked = 0
-						} else {
-							chunked = hex - len(RES.Header.theBuffer[indexRNRN+rn+2:RES.Header.position])
-						}
+							start := indexRNRN
+							hex, b := hexBytesToInt(RES.Header.theBuffer[start : indexRNRN+rn])
+							if !b || hex == 0 {
+								contentLength = 0
+								break
+							}
 
-						indexRNRN += hex + 4 + len(RES.Header.theBuffer[indexRNRN:rn])
+							if len(RES.Header.theBuffer[indexRNRN+rn+2:RES.Header.position]) > hex {
+								chunked = 0
+							} else {
+								chunked = hex - len(RES.Header.theBuffer[indexRNRN+rn+2:RES.Header.position])
+							}
+							indexRNRN += hex + 4 + len(RES.Header.theBuffer[start:indexRNRN+rn])
+						}
 					}
 				} else {
-					contentLength = 0
+					break
 				}
 				continue
 			}

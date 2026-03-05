@@ -38,21 +38,19 @@ func (e *RegnError) Error() string {
 }
 
 func genPeeker(size int) *bufio.Reader {
-	nr := peekerPool.Get()
-	if nr == nil {
+	nr, ok := peekerPool.Get().(*bufio.Reader)
+	if !ok || nr.Size() < size {
 		return bufio.NewReaderSize(nil, size)
 	}
-
-	return nr.(*bufio.Reader)
+	return nr
 }
 
 func genFlusher(size int) *bufio.Writer {
-	nw := flusherPool.Get()
-	if nw == nil {
+	nw, ok := flusherPool.Get().(*bufio.Writer)
+	if !ok || nw.Size() < size {
 		return bufio.NewWriterSize(nil, size)
 	}
-
-	return nw.(*bufio.Writer)
+	return nw
 }
 
 func BytesToInt(b []byte) int {
