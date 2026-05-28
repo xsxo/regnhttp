@@ -29,18 +29,18 @@ func testMethod(t *testing.T) {
 	req = regn.Request(4 * 1024)
 
 	req.SetMethod(regn.MethodPut)
-	if raw := req.RawString(); raw[:len(regn.MethodPut)] != regn.MethodPut || raw[len(regn.MethodPut)] != ' ' {
-		t.Error("error when prepare RequestType.SetMethod function `set`\n" + strings.ReplaceAll(req.RawString(), "\r\n", "\\r\\n"))
+	if raw := req.String(); raw[:len(regn.MethodPut)] != regn.MethodPut || raw[len(regn.MethodPut)] != ' ' {
+		t.Error("error when prepare RequestType.SetMethod function `set`\n" + strings.ReplaceAll(req.String(), "\r\n", "\\r\\n"))
 	}
 
 	req.SetMethod(regn.MethodConnect)
-	if raw := req.RawString(); raw[:len(regn.MethodConnect)] != regn.MethodConnect || raw[len(regn.MethodConnect)] != ' ' {
-		t.Error("error when prepare RequestType.SetMethod function `from lower to upper`\n" + strings.ReplaceAll(req.RawString(), "\r\n", "\\r\\n"))
+	if raw := req.String(); raw[:len(regn.MethodConnect)] != regn.MethodConnect || raw[len(regn.MethodConnect)] != ' ' {
+		t.Error("error when prepare RequestType.SetMethod function `from lower to upper`\n" + strings.ReplaceAll(req.String(), "\r\n", "\\r\\n"))
 	}
 
 	req.SetMethod(regn.MethodPost)
-	if raw := req.RawString(); raw[:len(regn.MethodPost)] != regn.MethodPost || raw[len(regn.MethodPost)] != ' ' {
-		t.Error("error when prepare RequestType.SetMethod function `from upper to lower`\n" + strings.ReplaceAll(req.RawString(), "\r\n", "\\r\\n"))
+	if raw := req.String(); raw[:len(regn.MethodPost)] != regn.MethodPost || raw[len(regn.MethodPost)] != ' ' {
+		t.Error("error when prepare RequestType.SetMethod function `from upper to lower`\n" + strings.ReplaceAll(req.String(), "\r\n", "\\r\\n"))
 	}
 
 }
@@ -49,13 +49,13 @@ func testURL(t *testing.T) {
 	req = regn.Request(4 * 1024)
 
 	req.SetURL("https://localhost:8080/api")
-	if !strings.Contains(req.RawString(), " /api ") {
-		t.Error("error when prepare RequestType.SetURL function `from lower to upper`\n" + strings.ReplaceAll(req.RawString(), "\r\n", "\\r\\n"))
+	if !strings.Contains(req.String(), " /api ") {
+		t.Error("error when prepare RequestType.SetURL function `from lower to upper`\n" + strings.ReplaceAll(req.String(), "\r\n", "\\r\\n"))
 	}
 
 	req.SetURL("https://localhost:8080/")
-	if !strings.Contains(req.RawString(), " / ") {
-		t.Error("error when prepare RequestType.SetURL function `from upper to lower`\n" + strings.ReplaceAll(req.RawString(), "\r\n", "\\r\\n"))
+	if !strings.Contains(req.String(), " / ") {
+		t.Error("error when prepare RequestType.SetURL function `from upper to lower`\n" + strings.ReplaceAll(req.String(), "\r\n", "\\r\\n"))
 	}
 }
 
@@ -63,18 +63,18 @@ func testHeader(t *testing.T) {
 	req = regn.Request(4 * 1024)
 
 	req.Header.Set("lanugage", "english")
-	if !strings.Contains(req.RawString(), "lanugage: english\r\n") {
-		t.Error("error when prepare RequestType.HeaderSet function `set`\n" + strings.ReplaceAll(req.RawString(), "\r\n", "\\r\\n"))
+	if !strings.Contains(req.String(), "lanugage: english\r\n") {
+		t.Error("error when prepare RequestType.HeaderSet function `set`\n" + strings.ReplaceAll(req.String(), "\r\n", "\\r\\n"))
 	}
 
 	req.Header.Set("lanugage", "en")
-	if !strings.Contains(req.RawString(), "lanugage: en\r\n") {
-		t.Error("error when prepare RequestType.HeaderSet function `from upper to lower`\n" + strings.ReplaceAll(req.RawString(), "\r\n", "\\r\\n"))
+	if !strings.Contains(req.String(), "lanugage: en\r\n") {
+		t.Error("error when prepare RequestType.HeaderSet function `from upper to lower`\n" + strings.ReplaceAll(req.String(), "\r\n", "\\r\\n"))
 	}
 
 	req.Header.Set("lanugage", "_english_")
-	if !strings.Contains(req.RawString(), "lanugage: _english_\r\n") {
-		t.Error("error when prepare RequestType.HeaderSet function `from lower to upper`\n" + strings.ReplaceAll(req.RawString(), "\r\n", "\\r\\n"))
+	if !strings.Contains(req.String(), "lanugage: _english_\r\n") {
+		t.Error("error when prepare RequestType.HeaderSet function `from lower to upper`\n" + strings.ReplaceAll(req.String(), "\r\n", "\\r\\n"))
 	}
 }
 
@@ -82,41 +82,41 @@ func testBody(t *testing.T) {
 	req = regn.Request(4 * 1024)
 
 	req.SetBodyString("hello")
-	if !strings.Contains(req.RawString(), "\r\n\r\nhello") {
-		t.Error("error when prepare RequestType.SetBodyString function `set`\n" + strings.ReplaceAll(req.RawString(), "\r\n", "\\r\\n"))
+	if !strings.Contains(req.String(), "\r\n\r\nhello") {
+		t.Error("error when prepare RequestType.SetBodyString function `set`\n" + strings.ReplaceAll(req.String(), "\r\n", "\\r\\n"))
 	}
 
 	req.SetBodyString("h")
-	if !strings.Contains(req.RawString(), "\r\n\r\nh") {
-		t.Error("error when prepare RequestType.SetBodyString function `from upper to lower`\n" + strings.ReplaceAll(req.RawString(), "\r\n", "\\r\\n"))
+	if !strings.Contains(req.String(), "\r\n\r\nh") {
+		t.Error("error when prepare RequestType.SetBodyString function `from upper to lower`\n" + strings.ReplaceAll(req.String(), "\r\n", "\\r\\n"))
 	}
 
 	req.SetBodyString("hello world")
-	if !strings.Contains(req.RawString(), "\r\n\r\nhello world") {
-		t.Error("error when prepare RequestType.SetBodyString function `from lower to upper`\n" + strings.ReplaceAll(req.RawString(), "\r\n", "\\r\\n"))
+	if !strings.Contains(req.String(), "\r\n\r\nhello world") {
+		t.Error("error when prepare RequestType.SetBodyString function `from lower to upper`\n" + strings.ReplaceAll(req.String(), "\r\n", "\\r\\n"))
 	}
 }
 
 func Test_SetHeaders(t *testing.T) {
 	prepare_request()
-	if !bytes.Contains(req.Raw(), []byte(" /api ")) {
+	if !bytes.Contains(req.Bytes(), []byte(" /api ")) {
 		t.Error("error when prepare RequestType.SetURL function")
-	} else if !bytes.Contains(req.Raw(), []byte("Message1: ")) {
+	} else if !bytes.Contains(req.Bytes(), []byte("Message1: ")) {
 		t.Error("error when prepare RequestType.Header.Set function")
-	} else if !bytes.Contains(req.Raw(), []byte("Message2: ")) {
+	} else if !bytes.Contains(req.Bytes(), []byte("Message2: ")) {
 		t.Error("error when prepare RequestType.Header.Add function")
-	} else if !bytes.Contains(req.Raw(), []byte("\r\n\r\nREGN HTTP TEST BODY")) {
+	} else if !bytes.Contains(req.Bytes(), []byte("\r\n\r\nREGN HTTP TEST BODY")) {
 		t.Error("error when prepare RequestType.SetBody function")
-	} else if !bytes.Contains(req.Raw(), []byte("Content-Length: ")) {
+	} else if !bytes.Contains(req.Bytes(), []byte("Content-Length: ")) {
 		t.Error("error when prepare RequestType.SetBody function")
 	}
 
 	clear_request()
-	if bytes.Contains(req.Raw(), []byte("Message1: ")) {
+	if bytes.Contains(req.Bytes(), []byte("Message1: ")) {
 		t.Error("error when prepare RequestType.Header.Del function")
-	} else if bytes.Contains(req.Raw(), []byte("Message2: ")) {
+	} else if bytes.Contains(req.Bytes(), []byte("Message2: ")) {
 		t.Error("error when prepare RequestType.Header.Remove function")
-	} else if bytes.Contains(req.Raw(), []byte("\r\n\r\nREGN HTTP TEST BODY")) {
+	} else if bytes.Contains(req.Bytes(), []byte("\r\n\r\nREGN HTTP TEST BODY")) {
 		t.Error("error when prepare RequestType.SetBody function")
 	}
 
