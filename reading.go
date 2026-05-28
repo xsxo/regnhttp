@@ -23,6 +23,7 @@ func (RES *ResponseType) Close() {
 
 func (RES *ResponseType) Reset() {
 	RES.Header.position = 0
+	RES.Header.bufferSize = cap(RES.Header.theBuffer)
 	RES.Header.theBuffer = RES.Header.theBuffer[:RES.Header.bufferSize]
 	for xo := 0; xo != RES.Header.bufferSize; xo++ {
 		RES.Header.theBuffer[xo] = 0x00
@@ -34,7 +35,9 @@ func (RES *ResponseType) BufferSize() int {
 }
 
 func Response(bufferSize int) *ResponseType {
-	return &ResponseType{Header: &headStruct{theBuffer: make([]byte, 0, bufferSize), bufferSize: bufferSize}}
+	header := &headStruct{theBuffer: make([]byte, 0, bufferSize)}
+	header.bufferSize = cap(header.theBuffer)
+	return &ResponseType{Header: header}
 }
 
 func (RES *ResponseType) StatusCode() []byte {
