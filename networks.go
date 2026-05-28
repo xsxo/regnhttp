@@ -641,33 +641,29 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 
 			indexL := bytes.Index(RES.Header.theBuffer[:RES.Header.position], contentLengthKey) + 16
 			if indexL == 15 {
-				if bytes.Contains(RES.Header.theBuffer[:indexRNRN], chunkedValue) {
-					chunkedB = true
-					indexRNRN += 4
-					if RES.Header.position > indexRNRN {
-						for chunkedB && chunked <= 0 {
-							rn := bytes.Index(RES.Header.theBuffer[indexRNRN:RES.Header.position], line)
-							if rn == -1 {
-								break
-							}
-
-							start := indexRNRN
-							hex, b := hexBytesToInt(RES.Header.theBuffer[start : indexRNRN+rn])
-							if !b || hex == 0 {
-								contentLength = 0
-								break
-							}
-
-							if len(RES.Header.theBuffer[indexRNRN+rn+2:RES.Header.position]) > hex {
-								chunked = 0
-							} else {
-								chunked = hex - len(RES.Header.theBuffer[indexRNRN+rn+2:RES.Header.position])
-							}
-							indexRNRN += hex + 4 + len(RES.Header.theBuffer[start:indexRNRN+rn])
+				indexRNRN += 4
+				chunkedB = true
+				if RES.Header.position > indexRNRN {
+					for chunkedB && chunked <= 0 {
+						rn := bytes.Index(RES.Header.theBuffer[indexRNRN:RES.Header.position], line)
+						if rn == -1 {
+							break
 						}
+
+						start := indexRNRN
+						hex, b := hexBytesToInt(RES.Header.theBuffer[start : indexRNRN+rn])
+						if !b || hex == 0 {
+							contentLength = 0
+							break
+						}
+
+						if len(RES.Header.theBuffer[indexRNRN+rn+2:RES.Header.position]) > hex {
+							chunked = 0
+						} else {
+							chunked = hex - len(RES.Header.theBuffer[indexRNRN+rn+2:RES.Header.position])
+						}
+						indexRNRN += hex + 4 + len(RES.Header.theBuffer[start:indexRNRN+rn])
 					}
-				} else {
-					break
 				}
 				continue
 			}
