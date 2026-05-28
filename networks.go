@@ -551,7 +551,7 @@ func (c *Client) DoTimeout(REQ *RequestType, RES *ResponseType, Timeout time.Dur
 // to send the http request and reseve the http response
 func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 	RES.Header.position = 0
-	RES.Header.bufferSize = cap(RES.Header.theBuffer) - 1
+	RES.Header.bufferSize = cap(RES.Header.theBuffer)
 	RES.Header.theBuffer = RES.Header.theBuffer[:RES.Header.bufferSize]
 	if err := c.Connect(REQ); err != nil {
 		c.Close()
