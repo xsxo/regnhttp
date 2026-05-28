@@ -614,6 +614,10 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 
 		if chunkedB {
 			for chunked <= 0 {
+				if indexRNRN > RES.Header.position {
+					continue
+				}
+
 				rn := bytes.Index(RES.Header.theBuffer[indexRNRN:RES.Header.position], line)
 				if rn == -1 {
 					break
