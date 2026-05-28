@@ -574,8 +574,8 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 	var chunkedB bool
 	var chunked int = -1
 	var indexRNRN int = -1
-	var bufferd int
 	var contentLength int = -1
+	var bufferd int
 
 	for contentLength != 0 {
 		if contentLength > 0 {
@@ -609,8 +609,9 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 			RES.Header.position += bufferd
 		} else {
 			RES.Header.theBuffer = append(RES.Header.theBuffer[:RES.Header.position], raw...)
+			RES.Header.bufferSize = cap(RES.Header.theBuffer)
 			RES.Header.position += bufferd
-			RES.Header.bufferSize += bufferd
+			RES.Header.theBuffer = RES.Header.theBuffer[:RES.Header.bufferSize]
 		}
 
 		if chunkedB {
