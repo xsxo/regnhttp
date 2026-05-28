@@ -48,10 +48,12 @@ func (REQ *RequestType) BufferSize() int {
 
 func Request(bufferSize int) *RequestType {
 	if bufferSize < 1024 {
-		panic("can not using bufferSize < 1024 in `regn.Request` function")
+		panic("can not using bufferSize < 1024 in `regn.Request` func")
 	}
 
-	toReturn := &RequestType{Header: &ConnectionInformation{raw: make([]byte, 0, bufferSize), bufferSize: bufferSize}}
+	header := &ConnectionInformation{raw: make([]byte, 0, bufferSize)}
+	header.bufferSize = cap(header.raw)
+	toReturn := &RequestType{Header: header}
 	toReturn.Header.raw = toReturn.Header.raw[:bufferSize]
 	copy(toReturn.Header.raw[toReturn.Header.position:], []byte(defaultRequest))
 	toReturn.Header.position += len(defaultRequest)
