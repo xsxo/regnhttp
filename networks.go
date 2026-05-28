@@ -376,8 +376,6 @@ func (c *Client) closeLines() {
 }
 
 func (c *Client) createLines() {
-	// c.closeLines()
-
 	if c.ReadBufferSize == 0 {
 		c.ReadBufferSize = 4096
 	}
