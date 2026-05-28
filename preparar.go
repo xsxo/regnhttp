@@ -42,6 +42,10 @@ func (REQ *RequestType) Reset() {
 	REQ.Header.position += len(defaultRequest)
 }
 
+func (REQ *RequestType) BufferSize() int {
+	return REQ.Header.bufferSize
+}
+
 func Request(bufferSize int) *RequestType {
 	if bufferSize < 1024 {
 		panic("can not using bufferSize < 1024 in `regn.Request` function")

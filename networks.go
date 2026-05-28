@@ -606,13 +606,12 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 
 		if RES.Header.position+bufferd < RES.Header.bufferSize {
 			copy(RES.Header.theBuffer[RES.Header.position:], raw)
-			RES.Header.position += bufferd
 		} else {
 			RES.Header.theBuffer = append(RES.Header.theBuffer[:RES.Header.position], raw...)
 			RES.Header.bufferSize = cap(RES.Header.theBuffer)
-			RES.Header.position += bufferd
 			RES.Header.theBuffer = RES.Header.theBuffer[:RES.Header.bufferSize]
 		}
+		RES.Header.position += bufferd
 
 		if chunkedB {
 			for chunked <= 0 {
