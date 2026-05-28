@@ -290,6 +290,8 @@ func (c *Client) connectSOCKS5(host string, port string) error {
 	return nil
 }
 
+// format: http://username:password@ip:port
+// foramt auth less: http://ip:port
 func (c *Client) Proxy(Url string) {
 	if new, ok := c.RawConnection.(*tls.Conn); ok {
 		if new != nil {
@@ -339,6 +341,9 @@ func (c *Client) Proxy(Url string) {
 	}
 }
 
+// Close connection + reader io buffer
+// note: the io buffer will Put in ClientBufferPool to can use it again
+// do not forget use regn.FreeBufferClient to free the io buffer to the memorey if you do not need to use it again
 func (c *Client) Close() {
 	if new, ok := c.RawConnection.(*tls.Conn); ok {
 		if new != nil {
@@ -393,6 +398,7 @@ func (c *Client) createLines() {
 	}
 }
 
+// to connect with the target server before do anything
 func (c *Client) Connect(REQ *RequestType) error {
 	if c.boolCustomConnection {
 		return nil
@@ -496,6 +502,9 @@ func (c *Client) Connect(REQ *RequestType) error {
 	return nil
 }
 
+// send bytes of http request to the server except the last byte, need the full http request as an argument
+// after that need to use Client.Do function to send the last byte to the server
+// note: this function not working with all servers need to do a test with the target server before use it
 func (c *Client) DoPreRequest(REQ *RequestType) error {
 	if err := c.Connect(REQ); err != nil {
 		c.Close()
@@ -523,6 +532,7 @@ func (c *Client) DoPreRequest(REQ *RequestType) error {
 	return nil
 }
 
+// do function with timeout (SetDeadline function)
 func (c *Client) DoTimeout(REQ *RequestType, RES *ResponseType, Timeout time.Duration) error {
 	if err := c.Connect(REQ); err != nil {
 		c.Close()
@@ -538,7 +548,7 @@ func (c *Client) DoTimeout(REQ *RequestType, RES *ResponseType, Timeout time.Dur
 	return nil
 }
 
-// not support goroutine-safe (mutli threads)
+// to send the http request and reseve the http response
 func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 	RES.Header.position = 0
 	RES.Header.theBuffer = RES.Header.theBuffer[:RES.Header.bufferSize]
@@ -598,7 +608,7 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 			copy(RES.Header.theBuffer[RES.Header.position:], raw)
 			RES.Header.position += bufferd
 		} else {
-			RES.Header.theBuffer = append(RES.Header.theBuffer, raw...)
+			RES.Header.theBuffer = append(RES.Header.theBuffer[:RES.Header.position], raw...)
 			RES.Header.position += bufferd
 			RES.Header.bufferSize += bufferd
 		}

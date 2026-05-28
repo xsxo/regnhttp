@@ -112,10 +112,10 @@ func (HEAD *headStruct) Get(name string) string {
 	return ""
 }
 
-func (RES *ResponseType) Raw() []byte {
+func (RES *ResponseType) Bytes() []byte {
 	return RES.Header.theBuffer[:RES.Header.position]
 }
 
-func (RES *ResponseType) RawString() string {
+func (RES *ResponseType) String() string {
 	return string(RES.Header.theBuffer[:RES.Header.position])
 }

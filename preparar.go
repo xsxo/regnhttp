@@ -214,10 +214,10 @@ func (REQ *ConnectionInformation) Remove(key string) {
 	REQ.Del(key)
 }
 
-func (REQ *RequestType) RawString() string {
+func (REQ *RequestType) String() string {
 	return string(REQ.Header.raw[:REQ.Header.position])
 }
 
-func (REQ *RequestType) Raw() []byte {
+func (REQ *RequestType) Bytes() []byte {
 	return REQ.Header.raw[:REQ.Header.position]
 }
