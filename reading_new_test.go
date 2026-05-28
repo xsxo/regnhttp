@@ -39,8 +39,8 @@ func TestReadingNew(t *testing.T) {
 	r.SetURL("https://error_server.error/")
 	if err := c.Do(r, s); err == nil {
 		t.Error("Do function 4")
-	} else if s.RawString() != "" {
-		t.Error("Clean response 's.RawString()'")
+	} else if s.String() != "" {
+		t.Error("Clean response 's.String()'")
 	} else if s.Body() != nil {
 		t.Error("Clean response 's.Body()'")
 	} else if s.StatusCodeInt() != 0 {
