@@ -571,6 +571,7 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 	}
 
 	var chunkedB bool
+	var shouldRN int
 	var chunked int = -1
 	var indexRNRN int = -1
 	var contentLength int = -1
@@ -623,9 +624,10 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 					break
 				}
 
-				start := indexRNRN
-				hex, b := hexBytesToInt(RES.Header.theBuffer[start : indexRNRN+rn])
+				hex, b := hexBytesToInt(RES.Header.theBuffer[indexRNRN : indexRNRN+rn])
 				if !b || hex == 0 {
+					copy(RES.Header.theBuffer[indexRNRN-shouldRN:], RES.Header.theBuffer[indexRNRN+rn+2:])
+					RES.Header.position = indexRNRN - 2
 					contentLength = 0
 					break
 				}
@@ -635,7 +637,10 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 				} else {
 					chunked = hex - len(RES.Header.theBuffer[indexRNRN+rn+2:RES.Header.position])
 				}
-				indexRNRN += hex + 4 + len(RES.Header.theBuffer[start:indexRNRN+rn])
+				copy(RES.Header.theBuffer[indexRNRN-shouldRN:], RES.Header.theBuffer[indexRNRN+rn+2:])
+				RES.Header.position -= len(RES.Header.theBuffer[indexRNRN-shouldRN : indexRNRN+rn+2])
+				indexRNRN += hex + 2 - shouldRN
+				shouldRN = 2
 			}
 		} else if indexRNRN == -1 {
 			indexRNRN = bytes.Index(RES.Header.theBuffer[:RES.Header.position], lines)
@@ -648,15 +653,16 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 				indexRNRN += 4
 				chunkedB = true
 				if RES.Header.position > indexRNRN {
-					for chunkedB && chunked <= 0 {
+					for chunked <= 0 {
 						rn := bytes.Index(RES.Header.theBuffer[indexRNRN:RES.Header.position], line)
 						if rn == -1 {
 							break
 						}
 
-						start := indexRNRN
-						hex, b := hexBytesToInt(RES.Header.theBuffer[start : indexRNRN+rn])
+						hex, b := hexBytesToInt(RES.Header.theBuffer[indexRNRN : indexRNRN+rn])
 						if !b || hex == 0 {
+							copy(RES.Header.theBuffer[indexRNRN-shouldRN:], RES.Header.theBuffer[indexRNRN+rn+2:])
+							RES.Header.position -= len(RES.Header.theBuffer[indexRNRN:indexRNRN+rn]) + 2 + 2
 							contentLength = 0
 							break
 						}
@@ -666,7 +672,10 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 						} else {
 							chunked = hex - len(RES.Header.theBuffer[indexRNRN+rn+2:RES.Header.position])
 						}
-						indexRNRN += hex + 4 + len(RES.Header.theBuffer[start:indexRNRN+rn])
+						copy(RES.Header.theBuffer[indexRNRN-shouldRN:], RES.Header.theBuffer[indexRNRN+rn+2:])
+						RES.Header.position -= len(RES.Header.theBuffer[indexRNRN-shouldRN : indexRNRN+rn+2])
+						indexRNRN += hex + 2 - shouldRN
+						shouldRN = 2
 					}
 				}
 				continue
@@ -675,6 +684,7 @@ func (c *Client) Do(REQ *RequestType, RES *ResponseType) error {
 			contentLength = BytesToInt(RES.Header.theBuffer[indexL:indexRN])
 			contentLength -= len(RES.Header.theBuffer[indexRNRN+4 : RES.Header.position])
 		}
+
 	}
 
 	RES.Header.theBuffer = RES.Header.theBuffer[:RES.Header.position]
