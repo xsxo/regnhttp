@@ -376,12 +376,12 @@ func (c *Client) closeLines() {
 }
 
 func (c *Client) createLines() {
-	if c.ReadBufferSize == 0 {
-		c.ReadBufferSize = 4096
-	}
-
 	if c.WriteBufferSize == 0 {
 		c.WriteBufferSize = 4096
+	}
+
+	if c.ReadBufferSize == 0 {
+		c.ReadBufferSize = 4096
 	}
 
 	c.writer = genFlusher(c.WriteBufferSize)
@@ -394,6 +394,9 @@ func (c *Client) createLines() {
 		c.writer.Reset(c.RawConnection)
 		c.reader.Reset(c.RawConnection)
 	}
+
+	c.WriteBufferSize = c.writer.Size()
+	c.ReadBufferSize = c.reader.Size()
 }
 
 // to connect with the target server before do anything
